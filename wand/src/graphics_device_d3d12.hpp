@@ -7,35 +7,35 @@
 #include <deque>
 
 namespace wand {
-  class GraphicsDeviceD3D12 : public GraphicsDevice {
-    constexpr static auto MAX_FRAMES_IN_FLIGHT{2};
-    constexpr static auto RES_DESC_HEAP_SIZE{1'000'000};
-    constexpr static auto RTV_HEAP_SIZE{1'000'000};
-    constexpr static auto DSV_HEAP_SIZE{1'000'000};
+class GraphicsDeviceD3D12 final : public GraphicsDevice {
+  constexpr static auto max_frames_in_flight_{2};
+  constexpr static auto res_desc_heap_size_{1'000'000};
+  constexpr static auto rtv_heap_size_{1'000'000};
+  constexpr static auto dsv_heap_size_{1'000'000};
 
-    Microsoft::WRL::ComPtr<IDXGIFactory7> mFactory;
-    Microsoft::WRL::ComPtr<ID3D12Device9> mDevice;
-    Microsoft::WRL::ComPtr<ID3D12CommandQueue> mCmdQueue;
+  Microsoft::WRL::ComPtr<IDXGIFactory7> factory_;
+  Microsoft::WRL::ComPtr<ID3D12Device9> device_;
+  Microsoft::WRL::ComPtr<ID3D12CommandQueue> direct_queue_;
 
-    std::array<Microsoft::WRL::ComPtr<ID3D12CommandAllocator>, MAX_FRAMES_IN_FLIGHT> mCmdAllocs;
-    std::array<Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList6>, MAX_FRAMES_IN_FLIGHT> mCmdLists;
+  std::array<Microsoft::WRL::ComPtr<ID3D12CommandAllocator>, max_frames_in_flight_> direct_command_allocators_;
+  std::array<Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList6>, max_frames_in_flight_> direct_command_lists_;
 
-    UINT64 mFrameFenceVal{MAX_FRAMES_IN_FLIGHT - 1};
-    Microsoft::WRL::ComPtr<ID3D12Fence1> mFrameFence;
+  UINT64 frame_fence_value_{max_frames_in_flight_ - 1};
+  Microsoft::WRL::ComPtr<ID3D12Fence1> frame_fence_;
 
-    Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> mResDescHeap;
-    Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> mRtvHeap;
-    Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> mDsvHeap;
+  Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> resource_descriptor_heap_;
+  Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> rtv_heap_;
+  Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> dsv_heap_;
 
-    std::deque<int> mResDescFreeIndices;
-    std::deque<int> mRtvFreeIndices;
-    std::deque<int> mDsvFreeIndices;
+  std::deque<int> resource_descriptor_heap_free_indices_;
+  std::deque<int> rtv_heap_free_indices_;
+  std::deque<int> dsv_heap_free_indices_;
 
-    auto SignalAndWaitFence(ID3D12Fence* fence, UINT64 signalValue, UINT64 waitValue) const noexcept -> void;
-    auto WaitForAllFrames() noexcept -> void;
-    auto WaitForInFlightFrameLimit() noexcept -> void;
+  auto SignalAndWaitFence(ID3D12Fence* fence, UINT64 signal_value, UINT64 wait_value) const noexcept -> void;
+  auto WaitForAllFrames() noexcept -> void;
+  auto WaitForInFlightFrameLimit() noexcept -> void;
 
-  public:
-    explicit GraphicsDeviceD3D12(HWND hwnd);
-  };
+public:
+  explicit GraphicsDeviceD3D12(HWND hwnd);
+};
 }

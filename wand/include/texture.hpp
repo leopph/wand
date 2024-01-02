@@ -1,23 +1,23 @@
 #pragma once
 
 namespace wand {
-  class Texture {
-  protected:
-    Texture() = default;
+class Texture {
+protected:
+  Texture() = default;
 
-  public:
-    Texture(Texture const& other) = delete;
-    Texture(Texture&& other) = delete;
+public:
+  Texture(Texture const& other) = delete;
+  Texture(Texture&& other) = delete;
 
-    virtual ~Texture() = default;
+  virtual ~Texture() = default;
 
-    auto operator=(Texture const& other) -> void = delete;
-    auto operator=(Texture&& other) -> void = delete;
+  auto operator=(Texture const& other) -> void = delete;
+  auto operator=(Texture&& other) -> void = delete;
 
-    enum class Dimension {
-      e1D,
-      e2D,
-      e3D
-    };
+  enum class Dimension {
+    k1D,
+    k2D,
+    k3D
   };
+};
 }

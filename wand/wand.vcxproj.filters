@@ -15,9 +15,6 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="src\wand.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="vendor\D3D12MemoryAllocator\D3D12MemAlloc.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>

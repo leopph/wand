@@ -4,21 +4,21 @@
 #include "texture.hpp"
 
 namespace wand {
-  class TextureD3D12 : public Texture {
-    UINT width;
-    UINT height;
-    UINT depth;
-    UINT arraySize;
-    UINT mips;
-    Dimension dim;
+class TextureD3D12 final : public Texture {
+  UINT width;
+  UINT height;
+  UINT depth;
+  UINT arraySize;
+  UINT mips;
+  Dimension dim;
 
-    int rtvIdx;
-    int dsvIdx;
-    int srvIdx;
-    int uavIdx;
+  int rtvIdx;
+  int dsvIdx;
+  int srvIdx;
+  int uavIdx;
 
-    D3D12MA::Allocation* alloc;
+  D3D12MA::Allocation* alloc;
 
-    DXGI_FORMAT format;
-  };
+  DXGI_FORMAT format;
+};
 }

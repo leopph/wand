@@ -8,13 +8,13 @@
 #include <type_traits>
 
 namespace {
-  auto CALLBACK WindowProc(HWND const hwnd, UINT const msg, WPARAM const wparam, LPARAM const lparam) -> LRESULT {
-    if (msg == WM_CLOSE) {
-      PostQuitMessage(0);
-      return 0;
-    }
-    return DefWindowProcW(hwnd, msg, wparam, lparam);
+auto CALLBACK WindowProc(HWND const hwnd, UINT const msg, WPARAM const wparam, LPARAM const lparam) -> LRESULT {
+  if (msg == WM_CLOSE) {
+    PostQuitMessage(0);
+    return 0;
   }
+  return DefWindowProcW(hwnd, msg, wparam, lparam);
+}
 }
 
 auto main() -> int {

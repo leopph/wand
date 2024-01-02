@@ -93,7 +93,6 @@
     <ClCompile Include="src\graphics_device.cpp" />
     <ClCompile Include="src\graphics_device_d3d12.cpp" />
     <ClCompile Include="vendor\D3D12MemoryAllocator\D3D12MemAlloc.cpp" />
-    <ClCompile Include="src\wand.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\buffer.hpp" />

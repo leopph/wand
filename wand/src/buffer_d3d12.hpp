@@ -4,13 +4,13 @@
 #include "buffer.hpp"
 
 namespace wand {
-  class BufferD3D12 : public Buffer {
-    UINT size;
+class BufferD3D12 final : public Buffer {
+  UINT size;
 
-    int srvIdx;
-    int uavIdx;
-    int cbvIdx;
+  int srvIdx;
+  int uavIdx;
+  int cbvIdx;
 
-    D3D12MA::Allocation* alloc;
-  };
+  D3D12MA::Allocation* alloc;
+};
 }
