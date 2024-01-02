@@ -78,6 +78,26 @@ GraphicsDeviceD3D12::GraphicsDeviceD3D12(HWND const hwnd) {
     assert(SUCCEEDED(hr));
   }
 
+  DXGI_SWAP_CHAIN_DESC1 constexpr swap_chain_desc{
+    .Width = 0,
+    .Height = 0,
+    .Format = swap_chain_format_,
+    .Stereo = FALSE,
+    .SampleDesc = {.Count = 1, .Quality = 0},
+    .BufferUsage = 0,
+    .BufferCount = swap_chain_buffer_count_,
+    .Scaling = DXGI_SCALING_NONE,
+    .SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD,
+    .AlphaMode = DXGI_ALPHA_MODE_UNSPECIFIED,
+    .Flags = 0
+  };
+
+  ComPtr<IDXGISwapChain1> swap_chain;
+  hr = factory_->CreateSwapChainForHwnd(direct_queue_.Get(), hwnd, &swap_chain_desc, nullptr, nullptr, &swap_chain);
+  assert(SUCCEEDED(hr));
+  hr = swap_chain.As(&swap_chain_);
+  assert(SUCCEEDED(hr));
+
   hr = device_->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(frame_fence_.GetAddressOf()));
   assert(SUCCEEDED(hr));
 

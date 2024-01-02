@@ -49,7 +49,7 @@ auto main() -> int {
 
   ShowWindow(hwnd.get(), SW_SHOW);
 
-  auto const gd{wand::GraphicsDevice::New(hwnd.get(), wand::GraphicsApi::kVulkan)};
+  auto const gd{wand::GraphicsDevice::New(hwnd.get(), wand::GraphicsApi::kD3D12)};
 
   if (!gd) {
     return -1;

@@ -9,6 +9,8 @@
 namespace wand {
 class GraphicsDeviceD3D12 final : public GraphicsDevice {
   constexpr static auto max_frames_in_flight_{2};
+  constexpr static auto swap_chain_buffer_count_{2};
+  constexpr static auto swap_chain_format_{DXGI_FORMAT_R8G8B8A8_UNORM};
   constexpr static auto res_desc_heap_size_{1'000'000};
   constexpr static auto rtv_heap_size_{1'000'000};
   constexpr static auto dsv_heap_size_{1'000'000};
@@ -19,6 +21,8 @@ class GraphicsDeviceD3D12 final : public GraphicsDevice {
 
   std::array<Microsoft::WRL::ComPtr<ID3D12CommandAllocator>, max_frames_in_flight_> direct_command_allocators_;
   std::array<Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList6>, max_frames_in_flight_> direct_command_lists_;
+
+  Microsoft::WRL::ComPtr<IDXGISwapChain4> swap_chain_;
 
   UINT64 frame_fence_value_{max_frames_in_flight_ - 1};
   Microsoft::WRL::ComPtr<ID3D12Fence1> frame_fence_;
