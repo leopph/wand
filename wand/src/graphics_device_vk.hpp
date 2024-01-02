@@ -19,5 +19,8 @@ class GraphicsDeviceVk final : public GraphicsDevice {
 
 public:
   explicit GraphicsDeviceVk(HWND window_handle);
+
+  [[nodiscard]] auto CreateBuffer(Buffer::Desc const& desc) -> std::unique_ptr<Buffer> override;
+  [[nodiscard]] auto CreateTexture(Texture::Desc const& desc) -> std::unique_ptr<Texture> override;
 };
 }

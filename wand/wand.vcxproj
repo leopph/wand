@@ -92,9 +92,13 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="src\buffer.cpp" />
+    <ClCompile Include="src\buffer_d3d12.cpp" />
     <ClCompile Include="src\graphics_device.cpp" />
     <ClCompile Include="src\graphics_device_d3d12.cpp" />
     <ClCompile Include="src\graphics_device_vk.cpp" />
+    <ClCompile Include="src\texture.cpp" />
+    <ClCompile Include="src\texture_d3d12.cpp" />
     <ClCompile Include="vendor\D3D12MemoryAllocator\D3D12MemAlloc.cpp" />
   </ItemGroup>
   <ItemGroup>

@@ -1,6 +1,8 @@
 #pragma once
 
 #include "core.hpp"
+#include "buffer.hpp"
+#include "texture.hpp"
 
 #include <memory>
 
@@ -26,6 +28,9 @@ public:
   auto operator=(GraphicsDevice&& other) -> void = delete;
 
   [[nodiscard]] WANDAPI static auto New(void* window_handle, GraphicsApi api) -> std::unique_ptr<GraphicsDevice>;
+
+  [[nodiscard]] virtual WANDAPI auto CreateBuffer(Buffer::Desc const& desc) -> std::unique_ptr<Buffer> = 0;
+  [[nodiscard]] virtual WANDAPI auto CreateTexture(Texture::Desc const& desc) -> std::unique_ptr<Texture> = 0;
 };
 
 enum ResourceViewFlags {

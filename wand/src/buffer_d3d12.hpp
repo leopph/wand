@@ -5,12 +5,9 @@
 
 namespace wand {
 class BufferD3D12 final : public Buffer {
-  UINT size;
+  Microsoft::WRL::ComPtr<D3D12MA::Allocation> alloc_;
 
-  int srvIdx;
-  int uavIdx;
-  int cbvIdx;
-
-  D3D12MA::Allocation* alloc;
+public:
+  BufferD3D12(Desc const& desc, Microsoft::WRL::ComPtr<D3D12MA::Allocation> alloc);
 };
 }

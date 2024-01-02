@@ -17,6 +17,7 @@ class GraphicsDeviceD3D12 final : public GraphicsDevice {
 
   Microsoft::WRL::ComPtr<IDXGIFactory7> factory_;
   Microsoft::WRL::ComPtr<ID3D12Device9> device_;
+  Microsoft::WRL::ComPtr<D3D12MA::Allocator> allocator_;
   Microsoft::WRL::ComPtr<ID3D12CommandQueue> direct_queue_;
 
   std::array<Microsoft::WRL::ComPtr<ID3D12CommandAllocator>, max_frames_in_flight_> direct_command_allocators_;
@@ -41,5 +42,8 @@ class GraphicsDeviceD3D12 final : public GraphicsDevice {
 
 public:
   explicit GraphicsDeviceD3D12(HWND hwnd);
+
+  [[nodiscard]] auto CreateBuffer(Buffer::Desc const& desc) -> std::unique_ptr<Buffer> override;
+  [[nodiscard]] auto CreateTexture(Texture::Desc const& desc) -> std::unique_ptr<Texture> override;
 };
 }

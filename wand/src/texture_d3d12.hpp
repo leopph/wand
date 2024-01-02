@@ -5,20 +5,10 @@
 
 namespace wand {
 class TextureD3D12 final : public Texture {
-  UINT width;
-  UINT height;
-  UINT depth;
-  UINT arraySize;
-  UINT mips;
-  Dimension dim;
+public:
+  TextureD3D12(Desc const& desc, Microsoft::WRL::ComPtr<D3D12MA::Allocation> alloc);
 
-  int rtvIdx;
-  int dsvIdx;
-  int srvIdx;
-  int uavIdx;
-
-  D3D12MA::Allocation* alloc;
-
-  DXGI_FORMAT format;
+private:
+  Microsoft::WRL::ComPtr<D3D12MA::Allocation> alloc_;
 };
 }

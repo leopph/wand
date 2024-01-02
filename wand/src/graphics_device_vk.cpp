@@ -7,4 +7,12 @@ GraphicsDeviceVk::GraphicsDeviceVk(HWND const window_handle) :
   vk::InstanceCreateInfo const instance_create_info{{}, &app_info};
   instance_ = vk::raii::Instance{context_, instance_create_info};
 }
+
+auto GraphicsDeviceVk::CreateBuffer(Buffer::Desc const& desc) -> std::unique_ptr<Buffer> {
+  return nullptr; // TODO
+}
+
+auto GraphicsDeviceVk::CreateTexture(Texture::Desc const& desc) -> std::unique_ptr<Texture> {
+  return nullptr; // TODO
+}
 }

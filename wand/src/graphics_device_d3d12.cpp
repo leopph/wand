@@ -1,8 +1,10 @@
 #ifdef _WIN64
 
 #include "graphics_device_d3d12.hpp"
+#include "buffer_d3d12.hpp"
 
 #include <cassert>
+#include <utility>
 
 namespace wand {
 auto GraphicsDeviceD3D12::SignalAndWaitFence(ID3D12Fence* fence, UINT64 const signal_value, UINT64 const wait_value) const noexcept -> void {
@@ -59,6 +61,21 @@ GraphicsDeviceD3D12::GraphicsDeviceD3D12(HWND const hwnd) {
   hr = info_queue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_CORRUPTION, TRUE);
   assert(SUCCEEDED(hr));
 #endif
+
+  ComPtr<IDXGIAdapter> adapter;
+  hr = factory_->EnumAdapterByLuid(device_->GetAdapterLuid(), IID_PPV_ARGS(&adapter));
+  assert(SUCCEEDED(hr));
+
+  D3D12MA::ALLOCATOR_DESC const allocator_desc{
+    .Flags = D3D12MA::ALLOCATOR_FLAG_NONE,
+    .pDevice = device_.Get(),
+    .PreferredBlockSize = 0,
+    .pAllocationCallbacks = nullptr,
+    .pAdapter = adapter.Get()
+  };
+
+  hr = CreateAllocator(&allocator_desc, &allocator_);
+  assert(SUCCEEDED(hr));
 
   D3D12_COMMAND_QUEUE_DESC constexpr direct_queue_desc{
     .Type = D3D12_COMMAND_LIST_TYPE_DIRECT,
@@ -142,6 +159,40 @@ GraphicsDeviceD3D12::GraphicsDeviceD3D12(HWND const hwnd) {
   for (auto i{0}; i < dsv_heap_size_; i++) {
     dsv_heap_free_indices_.emplace_back(i);
   }
+}
+
+auto GraphicsDeviceD3D12::CreateBuffer(Buffer::Desc const& desc) -> std::unique_ptr<Buffer> {
+  D3D12MA::ALLOCATION_DESC constexpr allocation_desc{
+    .Flags = D3D12MA::ALLOCATION_FLAG_NONE,
+    .HeapType = D3D12_HEAP_TYPE_DEFAULT,
+    .ExtraHeapFlags = D3D12_HEAP_FLAG_NONE,
+    .CustomPool = nullptr,
+    .pPrivateData = nullptr
+  };
+
+  auto const buffer_desc{CD3DX12_RESOURCE_DESC1::Buffer(static_cast<UINT64>(desc.width))};
+
+  Microsoft::WRL::ComPtr<D3D12MA::Allocation> allocation;
+  [[maybe_unused]] auto const hr{allocator_->CreateResource2(&allocation_desc, &buffer_desc, D3D12_RESOURCE_STATE_COMMON, nullptr, &allocation, IID_NULL, nullptr)};
+  assert(SUCCEEDED(hr));
+
+  return std::make_unique<BufferD3D12>(desc, std::move(allocation));
+}
+
+auto GraphicsDeviceD3D12::CreateTexture(Texture::Desc const& desc) -> std::unique_ptr<Texture> {
+  D3D12MA::ALLOCATION_DESC constexpr allocation_desc{
+    .Flags = D3D12MA::ALLOCATION_FLAG_NONE,
+    .HeapType = D3D12_HEAP_TYPE_DEFAULT,
+    .ExtraHeapFlags = D3D12_HEAP_FLAG_NONE,
+    .CustomPool = nullptr,
+    .pPrivateData = nullptr
+  };
+
+  auto const texture_desc{[&desc] {
+    // TODO
+  }};
+
+  return nullptr;
 }
 }
 

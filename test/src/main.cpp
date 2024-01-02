@@ -51,6 +51,8 @@ auto main() -> int {
 
   auto const gd{wand::GraphicsDevice::New(hwnd.get(), wand::GraphicsApi::kD3D12)};
 
+  auto const buffer{gd->CreateBuffer(wand::Buffer::Desc{128})};
+
   if (!gd) {
     return -1;
   }

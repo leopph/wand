@@ -2,8 +2,13 @@
 
 namespace wand {
 class Buffer {
+public:
+  struct Desc {
+    int width;
+  };
+
 protected:
-  Buffer() = default;
+  explicit Buffer(Desc const& desc);
 
 public:
   Buffer(Buffer const& other) = delete;
@@ -13,5 +18,10 @@ public:
 
   auto operator=(Buffer const& other) -> void = delete;
   auto operator=(Buffer&& other) -> void = delete;
+
+  [[nodiscard]] auto GetDesc() const -> Desc const&;
+
+private:
+  Desc desc_;
 };
 }
