@@ -3,6 +3,7 @@
 #ifdef _WIN64
 #include "graphics_device_d3d12.hpp"
 #endif
+#include "graphics_device_vk.hpp"
 
 namespace wand {
 auto GraphicsDevice::New(void* const window_handle, GraphicsApi const api) -> std::unique_ptr<GraphicsDevice> {
@@ -13,6 +14,9 @@ auto GraphicsDevice::New(void* const window_handle, GraphicsApi const api) -> st
     return std::make_unique<GraphicsDeviceD3D12>(static_cast<HWND>(window_handle));
   }
 #endif
+  case kVulkan: {
+    return std::make_unique<GraphicsDeviceVk>(static_cast<HWND>(window_handle));
+  }
   }
 }
 }
