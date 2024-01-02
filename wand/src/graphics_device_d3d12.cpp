@@ -1,9 +1,9 @@
-#include "wand.hpp"
+#include "graphics_device_d3d12.hpp"
 
 #include <cassert>
 
 namespace wand {
-  auto GraphicsDevice::SignalAndWaitFence(ID3D12Fence* fence, UINT64 const signalValue, UINT64 const waitValue) const noexcept -> void {
+  auto GraphicsDeviceD3D12::SignalAndWaitFence(ID3D12Fence* fence, UINT64 const signalValue, UINT64 const waitValue) const noexcept -> void {
     [[maybe_unused]] auto hr{mCmdQueue->Signal(fence, signalValue)};
     assert(SUCCEEDED(hr));
 
@@ -13,19 +13,19 @@ namespace wand {
     }
   }
 
-  auto GraphicsDevice::WaitForAllFrames() noexcept -> void {
+  auto GraphicsDeviceD3D12::WaitForAllFrames() noexcept -> void {
     auto const signalValue{++mFrameFenceVal};
     auto const waitValue{signalValue};
     SignalAndWaitFence(mFrameFence.Get(), signalValue, waitValue);
   }
 
-  auto GraphicsDevice::WaitForInFlightFrameLimit() noexcept -> void {
+  auto GraphicsDeviceD3D12::WaitForInFlightFrameLimit() noexcept -> void {
     auto const signalValue{++mFrameFenceVal};
     auto const waitValue{signalValue - MAX_FRAMES_IN_FLIGHT + 1};
     SignalAndWaitFence(mFrameFence.Get(), signalValue, waitValue);
   }
 
-  GraphicsDevice::GraphicsDevice() {
+  GraphicsDeviceD3D12::GraphicsDeviceD3D12() {
     using Microsoft::WRL::ComPtr;
 
     [[maybe_unused]] HRESULT hr;

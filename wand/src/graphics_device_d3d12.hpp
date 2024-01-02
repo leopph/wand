@@ -1,63 +1,13 @@
 #pragma once
 
-#include <d3d12.h>
-#include <dxgi1_6.h>
-#include <wrl/client.h>
-#include <D3D12MemAlloc.h>
+#include "platform_d3d12.hpp"
+#include "graphics_device.hpp"
 
 #include <array>
 #include <deque>
 
 namespace wand {
-  enum ResourceViewFlags {
-    RTV_BIT = 1 << 0,
-    DSV_BIT = 1 << 1,
-    SRV_BIT = 1 << 2,
-    UAV_BIT = 1 << 3,
-    CBV_BIT = 1 << 4,
-  };
-
-
-  class Texture {
-  public:
-    enum class Dimension {
-      e1D,
-      e2D,
-      e3D
-    };
-
-
-    UINT width;
-    UINT height;
-    UINT depth;
-    UINT arraySize;
-    UINT mips;
-    Dimension dim;
-
-    int rtvIdx;
-    int dsvIdx;
-    int srvIdx;
-    int uavIdx;
-
-    D3D12MA::Allocation* alloc;
-
-    DXGI_FORMAT format;
-  };
-
-
-  class Buffer {
-  public:
-    UINT size;
-
-    int srvIdx;
-    int uavIdx;
-    int cbvIdx;
-
-    D3D12MA::Allocation* alloc;
-  };
-
-
-  class GraphicsDevice {
+  class GraphicsDeviceD3D12 : public GraphicsDevice {
     constexpr static auto MAX_FRAMES_IN_FLIGHT{2};
     constexpr static auto RES_DESC_HEAP_SIZE{1'000'000};
     constexpr static auto RTV_HEAP_SIZE{1'000'000};
@@ -86,6 +36,6 @@ namespace wand {
     auto WaitForInFlightFrameLimit() noexcept -> void;
 
   public:
-    GraphicsDevice();
+    GraphicsDeviceD3D12();
   };
 }
