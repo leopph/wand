@@ -1,3 +1,5 @@
+#ifdef _WIN64
+
 #include "graphics_device_d3d12.hpp"
 
 #include <cassert>
@@ -25,7 +27,7 @@ namespace wand {
     SignalAndWaitFence(mFrameFence.Get(), signalValue, waitValue);
   }
 
-  GraphicsDeviceD3D12::GraphicsDeviceD3D12() {
+  GraphicsDeviceD3D12::GraphicsDeviceD3D12(HWND const hwnd) {
     using Microsoft::WRL::ComPtr;
 
     [[maybe_unused]] HRESULT hr;
@@ -129,3 +131,5 @@ namespace wand {
     }
   }
 }
+
+#endif

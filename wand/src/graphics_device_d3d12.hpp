@@ -36,6 +36,6 @@ namespace wand {
     auto WaitForInFlightFrameLimit() noexcept -> void;
 
   public:
-    GraphicsDeviceD3D12();
+    explicit GraphicsDeviceD3D12(HWND hwnd);
   };
 }

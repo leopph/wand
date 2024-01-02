@@ -24,7 +24,7 @@ namespace wand {
     auto operator=(GraphicsDevice const& other) -> void = delete;
     auto operator=(GraphicsDevice&& other) -> void = delete;
 
-    [[nodiscard]] WANDAPI static auto New(GraphicsApi api) -> std::unique_ptr<GraphicsDevice>;
+    [[nodiscard]] WANDAPI static auto New(void* window_handle, GraphicsApi api) -> std::unique_ptr<GraphicsDevice>;
   };
 
   enum ResourceViewFlags {
