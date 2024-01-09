@@ -99,7 +99,10 @@
     <ClCompile Include="src\graphics_device_vk.cpp" />
     <ClCompile Include="src\texture.cpp" />
     <ClCompile Include="src\texture_d3d12.cpp" />
-    <ClCompile Include="vendor\D3D12MemoryAllocator\D3D12MemAlloc.cpp" />
+    <ClCompile Include="vendor\D3D12MemoryAllocator\D3D12MemAlloc.cpp">
+      <WarningLevel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">TurnOffAllWarnings</WarningLevel>
+      <WarningLevel Condition="'$(Configuration)|$(Platform)'=='Release|x64'">TurnOffAllWarnings</WarningLevel>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\buffer.hpp" />
