@@ -44,9 +44,6 @@
     <ClInclude Include="include\graphics_device.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="vendor\D3DX12\d3dx12.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="vendor\D3DX12\d3dx12_barriers.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -75,9 +72,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="vendor\D3DX12\d3dx12_state_object.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="vendor\D3D12MemoryAllocator\D3D12MemAlloc.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\buffer.hpp">

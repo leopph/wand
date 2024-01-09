@@ -60,7 +60,7 @@
       <PreprocessorDefinitions>WAND_EXPORT;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>$(VULKAN_SDK)\Include;$(ProjectDir)include;$(ProjectDir)vendor\d3dx12;$(ProjectDir)\vendor\D3D12MemoryAllocator\</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(VULKAN_SDK)\Include;$(ProjectDir)include;$(ProjectDir)vendor\d3dx12;$(ProjectDir)vendor\D3D12MemoryAllocator;$(ProjectDir)vendor\VulkanMemoryAllocator</AdditionalIncludeDirectories>
       <LanguageStandard_C>stdc17</LanguageStandard_C>
     </ClCompile>
     <Link>
@@ -78,7 +78,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>WAND_EXPORT;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(VULKAN_SDK)\Include;$(ProjectDir)include;$(ProjectDir)vendor\d3dx12;$(ProjectDir)\vendor\D3D12MemoryAllocator\</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(VULKAN_SDK)\Include;$(ProjectDir)include;$(ProjectDir)vendor\d3dx12;$(ProjectDir)vendor\D3D12MemoryAllocator;$(ProjectDir)vendor\VulkanMemoryAllocator</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <LanguageStandard_C>stdc17</LanguageStandard_C>
     </ClCompile>
@@ -112,8 +112,6 @@
     <ClInclude Include="src\platform_d3d12.hpp" />
     <ClInclude Include="src\platform_win32.hpp" />
     <ClInclude Include="src\texture_d3d12.hpp" />
-    <ClInclude Include="vendor\D3D12MemoryAllocator\D3D12MemAlloc.h" />
-    <ClInclude Include="vendor\D3DX12\d3dx12.h" />
     <ClInclude Include="vendor\D3DX12\d3dx12_barriers.h" />
     <ClInclude Include="vendor\D3DX12\d3dx12_check_feature_support.h" />
     <ClInclude Include="vendor\D3DX12\d3dx12_core.h" />
