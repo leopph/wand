@@ -144,14 +144,17 @@ DeviceD3D12::DeviceD3D12(HWND const hwnd) {
 
   ThrowIfFailed(device_->CreateDescriptorHeap(&dsv_heap_desc, IID_PPV_ARGS(&dsv_heap_)));
 
+  resource_descriptor_heap_free_indices_.reserve(res_desc_heap_size_);
   for (auto i{0}; i < res_desc_heap_size_; i++) {
     resource_descriptor_heap_free_indices_.emplace_back(i);
   }
 
+  rtv_heap_free_indices_.reserve(rtv_heap_size_);
   for (auto i{0}; i < rtv_heap_size_; i++) {
     rtv_heap_free_indices_.emplace_back(i);
   }
 
+  dsv_heap_free_indices_.reserve(dsv_heap_size_);
   for (auto i{0}; i < dsv_heap_size_; i++) {
     dsv_heap_free_indices_.emplace_back(i);
   }
@@ -181,7 +184,7 @@ auto DeviceD3D12::CreateBuffer(Buffer::Desc const& desc) -> std::unique_ptr<Buff
       .SizeInBytes = desc.width
     };
 
-    cbv_idx = resource_descriptor_heap_free_indices_.front();
+    cbv_idx = resource_descriptor_heap_free_indices_.back();
     resource_descriptor_heap_free_indices_.pop_back();
     device_->CreateConstantBufferView(&cbv_desc, CD3DX12_CPU_DESCRIPTOR_HANDLE{resource_descriptor_heap_->GetCPUDescriptorHandleForHeapStart(), static_cast<INT>(cbv_idx), device_->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV)});
   }
@@ -199,8 +202,8 @@ auto DeviceD3D12::CreateBuffer(Buffer::Desc const& desc) -> std::unique_ptr<Buff
       }
     };
 
-    srv_idx = resource_descriptor_heap_free_indices_.front();
-    resource_descriptor_heap_free_indices_.pop_front();
+    srv_idx = resource_descriptor_heap_free_indices_.back();
+    resource_descriptor_heap_free_indices_.pop_back();
     device_->CreateShaderResourceView(allocation->GetResource(), &srv_desc, CD3DX12_CPU_DESCRIPTOR_HANDLE{resource_descriptor_heap_->GetCPUDescriptorHandleForHeapStart(), static_cast<INT>(srv_idx), device_->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV)});
   }
 
@@ -217,8 +220,8 @@ auto DeviceD3D12::CreateBuffer(Buffer::Desc const& desc) -> std::unique_ptr<Buff
       }
     };
 
-    uav_idx = resource_descriptor_heap_free_indices_.front();
-    resource_descriptor_heap_free_indices_.pop_front();
+    uav_idx = resource_descriptor_heap_free_indices_.back();
+    resource_descriptor_heap_free_indices_.pop_back();
     device_->CreateUnorderedAccessView(allocation->GetResource(), nullptr, &uav_desc, CD3DX12_CPU_DESCRIPTOR_HANDLE{resource_descriptor_heap_->GetCPUDescriptorHandleForHeapStart(), static_cast<INT>(uav_idx), device_->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV)});
   }
 
