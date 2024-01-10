@@ -4,7 +4,9 @@
 #include "graphics_device.hpp"
 
 #include <array>
+#include <cstdint>
 #include <deque>
+#include <limits>
 
 namespace wand {
 class GraphicsDeviceD3D12 final : public GraphicsDevice {
@@ -14,6 +16,7 @@ class GraphicsDeviceD3D12 final : public GraphicsDevice {
   constexpr static auto res_desc_heap_size_{1'000'000};
   constexpr static auto rtv_heap_size_{1'000'000};
   constexpr static auto dsv_heap_size_{1'000'000};
+  constexpr static auto invalid_descriptor_idx_{std::numeric_limits<std::uint32_t>::max()};
 
   Microsoft::WRL::ComPtr<IDXGIFactory7> factory_;
   Microsoft::WRL::ComPtr<ID3D12Device9> device_;
@@ -32,9 +35,9 @@ class GraphicsDeviceD3D12 final : public GraphicsDevice {
   Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> rtv_heap_;
   Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> dsv_heap_;
 
-  std::deque<int> resource_descriptor_heap_free_indices_;
-  std::deque<int> rtv_heap_free_indices_;
-  std::deque<int> dsv_heap_free_indices_;
+  std::deque<std::uint32_t> resource_descriptor_heap_free_indices_;
+  std::deque<std::uint32_t> rtv_heap_free_indices_;
+  std::deque<std::uint32_t> dsv_heap_free_indices_;
 
   auto SignalAndWaitFence(ID3D12Fence* fence, UINT64 signal_value, UINT64 wait_value) const noexcept -> void;
   auto WaitForAllFrames() noexcept -> void;

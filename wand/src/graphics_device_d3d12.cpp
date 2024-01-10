@@ -4,16 +4,23 @@
 #include "buffer_d3d12.hpp"
 
 #include <cassert>
+#include <exception>
+#include <stdexcept>
 #include <utility>
+
+namespace {
+auto ThrowIfFailed(HRESULT const hr) -> void {
+  if (FAILED(hr)) {
+    throw std::exception{};
+  }
+}
+}
 
 namespace wand {
 auto GraphicsDeviceD3D12::SignalAndWaitFence(ID3D12Fence* fence, UINT64 const signal_value, UINT64 const wait_value) const noexcept -> void {
-  [[maybe_unused]] auto hr{direct_queue_->Signal(fence, signal_value)};
-  assert(SUCCEEDED(hr));
-
+  ThrowIfFailed(direct_queue_->Signal(fence, signal_value));
   if (fence->GetCompletedValue() < wait_value) {
-    hr = fence->SetEventOnCompletion(wait_value, nullptr);
-    assert(SUCCEEDED(hr));
+    ThrowIfFailed(fence->SetEventOnCompletion(wait_value, nullptr));
   }
 }
 
@@ -32,12 +39,9 @@ auto GraphicsDeviceD3D12::WaitForInFlightFrameLimit() noexcept -> void {
 GraphicsDeviceD3D12::GraphicsDeviceD3D12(HWND const hwnd) {
   using Microsoft::WRL::ComPtr;
 
-  [[maybe_unused]] HRESULT hr;
-
 #ifndef NDEBUG
   ComPtr<ID3D12Debug5> debug;
-  hr = D3D12GetDebugInterface(IID_PPV_ARGS(&debug));
-  assert(SUCCEEDED(hr));
+  ThrowIfFailed(D3D12GetDebugInterface(IID_PPV_ARGS(&debug)));
   debug->EnableDebugLayer();
 #endif
 
@@ -46,25 +50,25 @@ GraphicsDeviceD3D12::GraphicsDeviceD3D12(HWND const hwnd) {
   factory_create_flags |= DXGI_CREATE_FACTORY_DEBUG;
 #endif
 
-  hr = CreateDXGIFactory2(factory_create_flags, IID_PPV_ARGS(&factory_));
-  assert(SUCCEEDED(hr));
-
-  hr = D3D12CreateDevice(nullptr, D3D_FEATURE_LEVEL_12_1, IID_PPV_ARGS(&device_));
-  assert(SUCCEEDED(hr));
+  ThrowIfFailed(CreateDXGIFactory2(factory_create_flags, IID_PPV_ARGS(&factory_)));
+  ThrowIfFailed(D3D12CreateDevice(nullptr, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&device_)));
 
 #ifndef NDEBUG
   ComPtr<ID3D12InfoQueue> info_queue;
-  hr = device_.As(&info_queue);
-  assert(SUCCEEDED(hr));
-  hr = info_queue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_ERROR, TRUE);
-  assert(SUCCEEDED(hr));
-  hr = info_queue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_CORRUPTION, TRUE);
-  assert(SUCCEEDED(hr));
+  ThrowIfFailed(device_.As(&info_queue));
+  ThrowIfFailed(info_queue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_ERROR, TRUE));
+  ThrowIfFailed(info_queue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_CORRUPTION, TRUE));
 #endif
 
+  CD3DX12FeatureSupport feature_support;
+  ThrowIfFailed(feature_support.Init(device_.Get()));
+
+  if (feature_support.ResourceBindingTier() < D3D12_RESOURCE_BINDING_TIER_3 || feature_support.HighestShaderModel() < D3D_SHADER_MODEL_6_6) {
+    throw std::runtime_error{"Unsuppported hardware."};
+  }
+
   ComPtr<IDXGIAdapter> adapter;
-  hr = factory_->EnumAdapterByLuid(device_->GetAdapterLuid(), IID_PPV_ARGS(&adapter));
-  assert(SUCCEEDED(hr));
+  ThrowIfFailed(factory_->EnumAdapterByLuid(device_->GetAdapterLuid(), IID_PPV_ARGS(&adapter)));
 
   D3D12MA::ALLOCATOR_DESC const allocator_desc{
     .Flags = D3D12MA::ALLOCATOR_FLAG_NONE,
@@ -74,8 +78,7 @@ GraphicsDeviceD3D12::GraphicsDeviceD3D12(HWND const hwnd) {
     .pAdapter = adapter.Get()
   };
 
-  hr = CreateAllocator(&allocator_desc, &allocator_);
-  assert(SUCCEEDED(hr));
+  ThrowIfFailed(CreateAllocator(&allocator_desc, &allocator_));
 
   D3D12_COMMAND_QUEUE_DESC constexpr direct_queue_desc{
     .Type = D3D12_COMMAND_LIST_TYPE_DIRECT,
@@ -84,15 +87,11 @@ GraphicsDeviceD3D12::GraphicsDeviceD3D12(HWND const hwnd) {
     .NodeMask = 0
   };
 
-  hr = device_->CreateCommandQueue(&direct_queue_desc, IID_PPV_ARGS(&direct_queue_));
-  assert(SUCCEEDED(hr));
+  ThrowIfFailed(device_->CreateCommandQueue(&direct_queue_desc, IID_PPV_ARGS(&direct_queue_)));
 
   for (auto i{0}; i < max_frames_in_flight_; i++) {
-    hr = device_->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&direct_command_allocators_[i]));
-    assert(SUCCEEDED(hr));
-
-    hr = device_->CreateCommandList1(0, D3D12_COMMAND_LIST_TYPE_DIRECT, D3D12_COMMAND_LIST_FLAG_NONE, IID_PPV_ARGS(&direct_command_lists_[i]));
-    assert(SUCCEEDED(hr));
+    ThrowIfFailed(device_->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&direct_command_allocators_[i])));
+    ThrowIfFailed(device_->CreateCommandList1(0, D3D12_COMMAND_LIST_TYPE_DIRECT, D3D12_COMMAND_LIST_FLAG_NONE, IID_PPV_ARGS(&direct_command_lists_[i])));
   }
 
   DXGI_SWAP_CHAIN_DESC1 constexpr swap_chain_desc{
@@ -100,7 +99,10 @@ GraphicsDeviceD3D12::GraphicsDeviceD3D12(HWND const hwnd) {
     .Height = 0,
     .Format = swap_chain_format_,
     .Stereo = FALSE,
-    .SampleDesc = {.Count = 1, .Quality = 0},
+    .SampleDesc = {
+      .Count = 1,
+      .Quality = 0
+    },
     .BufferUsage = 0,
     .BufferCount = swap_chain_buffer_count_,
     .Scaling = DXGI_SCALING_NONE,
@@ -110,13 +112,10 @@ GraphicsDeviceD3D12::GraphicsDeviceD3D12(HWND const hwnd) {
   };
 
   ComPtr<IDXGISwapChain1> swap_chain;
-  hr = factory_->CreateSwapChainForHwnd(direct_queue_.Get(), hwnd, &swap_chain_desc, nullptr, nullptr, &swap_chain);
-  assert(SUCCEEDED(hr));
-  hr = swap_chain.As(&swap_chain_);
-  assert(SUCCEEDED(hr));
+  ThrowIfFailed(factory_->CreateSwapChainForHwnd(direct_queue_.Get(), hwnd, &swap_chain_desc, nullptr, nullptr, &swap_chain));
+  ThrowIfFailed(swap_chain.As(&swap_chain_));
 
-  hr = device_->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(frame_fence_.GetAddressOf()));
-  assert(SUCCEEDED(hr));
+  ThrowIfFailed(device_->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(frame_fence_.GetAddressOf())));
 
   D3D12_DESCRIPTOR_HEAP_DESC constexpr resource_descriptor_heap_desc{
     .Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
@@ -125,8 +124,7 @@ GraphicsDeviceD3D12::GraphicsDeviceD3D12(HWND const hwnd) {
     .NodeMask = 0
   };
 
-  hr = device_->CreateDescriptorHeap(&resource_descriptor_heap_desc, IID_PPV_ARGS(&resource_descriptor_heap_));
-  assert(SUCCEEDED(hr));
+  ThrowIfFailed(device_->CreateDescriptorHeap(&resource_descriptor_heap_desc, IID_PPV_ARGS(&resource_descriptor_heap_)));
 
   D3D12_DESCRIPTOR_HEAP_DESC constexpr rtv_heap_desc{
     .Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV,
@@ -135,8 +133,7 @@ GraphicsDeviceD3D12::GraphicsDeviceD3D12(HWND const hwnd) {
     .NodeMask = 0
   };
 
-  hr = device_->CreateDescriptorHeap(&rtv_heap_desc, IID_PPV_ARGS(&rtv_heap_));
-  assert(SUCCEEDED(hr));
+  ThrowIfFailed(device_->CreateDescriptorHeap(&rtv_heap_desc, IID_PPV_ARGS(&rtv_heap_)));
 
   D3D12_DESCRIPTOR_HEAP_DESC constexpr dsv_heap_desc{
     .Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV,
@@ -145,8 +142,7 @@ GraphicsDeviceD3D12::GraphicsDeviceD3D12(HWND const hwnd) {
     .NodeMask = 0
   };
 
-  hr = device_->CreateDescriptorHeap(&dsv_heap_desc, IID_PPV_ARGS(&dsv_heap_));
-  assert(SUCCEEDED(hr));
+  ThrowIfFailed(device_->CreateDescriptorHeap(&dsv_heap_desc, IID_PPV_ARGS(&dsv_heap_)));
 
   for (auto i{0}; i < res_desc_heap_size_; i++) {
     resource_descriptor_heap_free_indices_.emplace_back(i);
@@ -173,10 +169,60 @@ auto GraphicsDeviceD3D12::CreateBuffer(Buffer::Desc const& desc) -> std::unique_
   auto const buffer_desc{CD3DX12_RESOURCE_DESC1::Buffer(static_cast<UINT64>(desc.width))};
 
   Microsoft::WRL::ComPtr<D3D12MA::Allocation> allocation;
-  [[maybe_unused]] auto const hr{allocator_->CreateResource2(&allocation_desc, &buffer_desc, D3D12_RESOURCE_STATE_COMMON, nullptr, &allocation, IID_NULL, nullptr)};
-  assert(SUCCEEDED(hr));
+  ThrowIfFailed(allocator_->CreateResource2(&allocation_desc, &buffer_desc, D3D12_RESOURCE_STATE_COMMON, nullptr, &allocation, IID_NULL, nullptr));
 
-  return std::make_unique<BufferD3D12>(desc, std::move(allocation));
+  std::uint32_t cbv_idx{invalid_descriptor_idx_};
+  std::uint32_t srv_idx{invalid_descriptor_idx_};
+  std::uint32_t uav_idx{invalid_descriptor_idx_};
+
+  if (desc.usage & Buffer::kUsageConstantBuffer) {
+    D3D12_CONSTANT_BUFFER_VIEW_DESC const cbv_desc{
+      .BufferLocation = allocation->GetResource()->GetGPUVirtualAddress(),
+      .SizeInBytes = desc.width
+    };
+
+    cbv_idx = resource_descriptor_heap_free_indices_.front();
+    resource_descriptor_heap_free_indices_.pop_back();
+    device_->CreateConstantBufferView(&cbv_desc, CD3DX12_CPU_DESCRIPTOR_HANDLE{resource_descriptor_heap_->GetCPUDescriptorHandleForHeapStart(), static_cast<INT>(cbv_idx), device_->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV)});
+  }
+
+  if (desc.usage & Buffer::kUsageShaderResource) {
+    D3D12_SHADER_RESOURCE_VIEW_DESC const srv_desc{
+      .Format = DXGI_FORMAT_UNKNOWN,
+      .ViewDimension = D3D12_SRV_DIMENSION_BUFFER,
+      .Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING,
+      .Buffer = {
+        .FirstElement = 0,
+        .NumElements = desc.width / desc.stride,
+        .StructureByteStride = desc.stride,
+        .Flags = D3D12_BUFFER_SRV_FLAG_NONE
+      }
+    };
+
+    srv_idx = resource_descriptor_heap_free_indices_.front();
+    resource_descriptor_heap_free_indices_.pop_front();
+    device_->CreateShaderResourceView(allocation->GetResource(), &srv_desc, CD3DX12_CPU_DESCRIPTOR_HANDLE{resource_descriptor_heap_->GetCPUDescriptorHandleForHeapStart(), static_cast<INT>(srv_idx), device_->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV)});
+  }
+
+  if (desc.usage & Buffer::kUsageUnorderedAccess) {
+    D3D12_UNORDERED_ACCESS_VIEW_DESC const uav_desc{
+      .Format = DXGI_FORMAT_UNKNOWN,
+      .ViewDimension = D3D12_UAV_DIMENSION_BUFFER,
+      .Buffer = {
+        .FirstElement = 0,
+        .NumElements = desc.width / desc.stride,
+        .StructureByteStride = desc.stride,
+        .CounterOffsetInBytes = 0,
+        .Flags = D3D12_BUFFER_UAV_FLAG_NONE
+      }
+    };
+
+    uav_idx = resource_descriptor_heap_free_indices_.front();
+    resource_descriptor_heap_free_indices_.pop_front();
+    device_->CreateUnorderedAccessView(allocation->GetResource(), nullptr, &uav_desc, CD3DX12_CPU_DESCRIPTOR_HANDLE{resource_descriptor_heap_->GetCPUDescriptorHandleForHeapStart(), static_cast<INT>(uav_idx), device_->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV)});
+  }
+
+  return std::make_unique<BufferD3D12>(desc, std::move(allocation), cbv_idx, srv_idx, uav_idx);
 }
 
 auto GraphicsDeviceD3D12::CreateTexture(Texture::Desc const& desc) -> std::unique_ptr<Texture> {
@@ -188,9 +234,11 @@ auto GraphicsDeviceD3D12::CreateTexture(Texture::Desc const& desc) -> std::uniqu
     .pPrivateData = nullptr
   };
 
-  auto const texture_desc{[&desc] {
-    // TODO
-  }};
+  auto const texture_desc{
+    [&desc] {
+      // TODO
+    }
+  };
 
   return nullptr;
 }

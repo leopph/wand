@@ -1,3 +1,4 @@
+#ifdef _WIN64
 #include "texture_d3d12.hpp"
 
 #include <utility>
@@ -7,3 +8,4 @@ TextureD3D12::TextureD3D12(Desc const& desc, Microsoft::WRL::ComPtr<D3D12MA::All
   Texture{desc}, alloc_{std::move(alloc)} {
 }
 }
+#endif

@@ -11,7 +11,6 @@ enum class GraphicsApi {
 #ifdef _WIN64
   kD3D12 = 0,
 #endif
-  kVulkan = 1
 };
 
 class GraphicsDevice {

@@ -1,10 +1,23 @@
 #pragma once
 
+#include "core.hpp"
+
+#include <cstdint>
+
 namespace wand {
 class Buffer {
 public:
+  enum Usage : std::uint16_t {
+    kUsageNone = 0,
+    kUsageConstantBuffer = 1 << 0,
+    kUsageShaderResource = 1 << 1,
+    kUsageUnorderedAccess = 1 << 2
+  };
+
   struct Desc {
-    int width;
+    std::uint32_t width;
+    std::uint32_t stride;
+    Usage usage;
   };
 
 protected:
@@ -24,4 +37,7 @@ public:
 private:
   Desc desc_;
 };
+
+DEFINE_ENUM_FLAG_OPS(Buffer::Usage)
+
 }
