@@ -1,7 +1,7 @@
 #pragma once
 
 #include "platform_d3d12.hpp"
-#include "graphics_device.hpp"
+#include "device.hpp"
 
 #include <array>
 #include <cstdint>
@@ -9,7 +9,7 @@
 #include <limits>
 
 namespace wand {
-class GraphicsDeviceD3D12 final : public GraphicsDevice {
+class DeviceD3D12 final : public Device {
   constexpr static auto max_frames_in_flight_{2};
   constexpr static auto swap_chain_buffer_count_{2};
   constexpr static auto swap_chain_format_{DXGI_FORMAT_R8G8B8A8_UNORM};
@@ -44,7 +44,7 @@ class GraphicsDeviceD3D12 final : public GraphicsDevice {
   auto WaitForInFlightFrameLimit() noexcept -> void;
 
 public:
-  explicit GraphicsDeviceD3D12(HWND hwnd);
+  explicit DeviceD3D12(HWND hwnd);
 
   [[nodiscard]] auto CreateBuffer(Buffer::Desc const& desc) -> std::unique_ptr<Buffer> override;
   [[nodiscard]] auto CreateTexture(Texture::Desc const& desc) -> std::unique_ptr<Texture> override;

@@ -94,8 +94,8 @@
   <ItemGroup>
     <ClCompile Include="src\buffer.cpp" />
     <ClCompile Include="src\buffer_d3d12.cpp" />
-    <ClCompile Include="src\graphics_device.cpp" />
-    <ClCompile Include="src\graphics_device_d3d12.cpp" />
+    <ClCompile Include="src\device.cpp" />
+    <ClCompile Include="src\device_d3d12.cpp" />
     <ClCompile Include="src\texture.cpp" />
     <ClCompile Include="src\texture_d3d12.cpp" />
     <ClCompile Include="vendor\D3D12MemoryAllocator\D3D12MemAlloc.cpp">
@@ -109,7 +109,7 @@
     <ClInclude Include="include\texture.hpp" />
     <ClInclude Include="include\wand.hpp" />
     <ClInclude Include="src\buffer_d3d12.hpp" />
-    <ClInclude Include="src\graphics_device_d3d12.hpp" />
+    <ClInclude Include="src\device_d3d12.hpp" />
     <ClInclude Include="src\platform_d3d12.hpp" />
     <ClInclude Include="src\platform_win32.hpp" />
     <ClInclude Include="src\texture_d3d12.hpp" />
@@ -123,7 +123,7 @@
     <ClInclude Include="vendor\D3DX12\d3dx12_resource_helpers.h" />
     <ClInclude Include="vendor\D3DX12\d3dx12_root_signature.h" />
     <ClInclude Include="vendor\D3DX12\d3dx12_state_object.h" />
-    <ClInclude Include="include\graphics_device.hpp" />
+    <ClInclude Include="include\device.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />

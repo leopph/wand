@@ -1,6 +1,6 @@
 #ifdef _WIN64
 
-#include "graphics_device_d3d12.hpp"
+#include "device_d3d12.hpp"
 #include "buffer_d3d12.hpp"
 
 #include <cassert>
@@ -17,26 +17,26 @@ auto ThrowIfFailed(HRESULT const hr) -> void {
 }
 
 namespace wand {
-auto GraphicsDeviceD3D12::SignalAndWaitFence(ID3D12Fence* fence, UINT64 const signal_value, UINT64 const wait_value) const noexcept -> void {
+auto DeviceD3D12::SignalAndWaitFence(ID3D12Fence* fence, UINT64 const signal_value, UINT64 const wait_value) const noexcept -> void {
   ThrowIfFailed(direct_queue_->Signal(fence, signal_value));
   if (fence->GetCompletedValue() < wait_value) {
     ThrowIfFailed(fence->SetEventOnCompletion(wait_value, nullptr));
   }
 }
 
-auto GraphicsDeviceD3D12::WaitForAllFrames() noexcept -> void {
+auto DeviceD3D12::WaitForAllFrames() noexcept -> void {
   auto const signal_value{++frame_fence_value_};
   auto const wait_value{signal_value};
   SignalAndWaitFence(frame_fence_.Get(), signal_value, wait_value);
 }
 
-auto GraphicsDeviceD3D12::WaitForInFlightFrameLimit() noexcept -> void {
+auto DeviceD3D12::WaitForInFlightFrameLimit() noexcept -> void {
   auto const signal_value{++frame_fence_value_};
   auto const wait_value{signal_value - max_frames_in_flight_ + 1};
   SignalAndWaitFence(frame_fence_.Get(), signal_value, wait_value);
 }
 
-GraphicsDeviceD3D12::GraphicsDeviceD3D12(HWND const hwnd) {
+DeviceD3D12::DeviceD3D12(HWND const hwnd) {
   using Microsoft::WRL::ComPtr;
 
 #ifndef NDEBUG
@@ -157,7 +157,7 @@ GraphicsDeviceD3D12::GraphicsDeviceD3D12(HWND const hwnd) {
   }
 }
 
-auto GraphicsDeviceD3D12::CreateBuffer(Buffer::Desc const& desc) -> std::unique_ptr<Buffer> {
+auto DeviceD3D12::CreateBuffer(Buffer::Desc const& desc) -> std::unique_ptr<Buffer> {
   D3D12MA::ALLOCATION_DESC constexpr allocation_desc{
     .Flags = D3D12MA::ALLOCATION_FLAG_NONE,
     .HeapType = D3D12_HEAP_TYPE_DEFAULT,
@@ -225,7 +225,7 @@ auto GraphicsDeviceD3D12::CreateBuffer(Buffer::Desc const& desc) -> std::unique_
   return std::make_unique<BufferD3D12>(desc, std::move(allocation), cbv_idx, srv_idx, uav_idx);
 }
 
-auto GraphicsDeviceD3D12::CreateTexture(Texture::Desc const& desc) -> std::unique_ptr<Texture> {
+auto DeviceD3D12::CreateTexture(Texture::Desc const& desc) -> std::unique_ptr<Texture> {
   D3D12MA::ALLOCATION_DESC constexpr allocation_desc{
     .Flags = D3D12MA::ALLOCATION_FLAG_NONE,
     .HeapType = D3D12_HEAP_TYPE_DEFAULT,

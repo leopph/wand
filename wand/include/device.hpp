@@ -13,20 +13,20 @@ enum class GraphicsApi {
 #endif
 };
 
-class GraphicsDevice {
+class Device {
 protected:
-  GraphicsDevice() = default;
+  Device() = default;
 
 public:
-  GraphicsDevice(GraphicsDevice const& other) = delete;
-  GraphicsDevice(GraphicsDevice&& other) = delete;
+  Device(Device const& other) = delete;
+  Device(Device&& other) = delete;
 
-  virtual ~GraphicsDevice() = default;
+  virtual ~Device() = default;
 
-  auto operator=(GraphicsDevice const& other) -> void = delete;
-  auto operator=(GraphicsDevice&& other) -> void = delete;
+  auto operator=(Device const& other) -> void = delete;
+  auto operator=(Device&& other) -> void = delete;
 
-  [[nodiscard]] WANDAPI static auto New(void* window_handle, GraphicsApi api) -> std::unique_ptr<GraphicsDevice>;
+  [[nodiscard]] WANDAPI static auto New(void* window_handle, GraphicsApi api) -> std::unique_ptr<Device>;
 
   [[nodiscard]] virtual WANDAPI auto CreateBuffer(Buffer::Desc const& desc) -> std::unique_ptr<Buffer> = 0;
   [[nodiscard]] virtual WANDAPI auto CreateTexture(Texture::Desc const& desc) -> std::unique_ptr<Texture> = 0;
