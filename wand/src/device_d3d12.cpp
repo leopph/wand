@@ -158,15 +158,15 @@ DeviceD3D12::DeviceD3D12(HWND const hwnd) {
 }
 
 auto DeviceD3D12::CreateBuffer(Buffer::Desc const& desc) -> std::unique_ptr<Buffer> {
-  D3D12MA::ALLOCATION_DESC constexpr allocation_desc{
+  D3D12MA::ALLOCATION_DESC const allocation_desc{
     .Flags = D3D12MA::ALLOCATION_FLAG_NONE,
-    .HeapType = D3D12_HEAP_TYPE_DEFAULT,
+    .HeapType = desc.mappable ? D3D12_HEAP_TYPE_UPLOAD : D3D12_HEAP_TYPE_DEFAULT,
     .ExtraHeapFlags = D3D12_HEAP_FLAG_NONE,
     .CustomPool = nullptr,
     .pPrivateData = nullptr
   };
 
-  auto const buffer_desc{CD3DX12_RESOURCE_DESC1::Buffer(static_cast<UINT64>(desc.width))};
+  auto const buffer_desc{CD3DX12_RESOURCE_DESC1::Buffer(desc.width)};
 
   Microsoft::WRL::ComPtr<D3D12MA::Allocation> allocation;
   ThrowIfFailed(allocator_->CreateResource2(&allocation_desc, &buffer_desc, D3D12_RESOURCE_STATE_COMMON, nullptr, &allocation, IID_NULL, nullptr));

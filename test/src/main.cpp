@@ -51,17 +51,24 @@ auto main() -> int {
 
   auto const gd{wand::Device::New(hwnd.get(), wand::GraphicsApi::kD3D12)};
 
+  if (!gd) {
+    return -1;
+  }
+
   auto const buffer{
     gd->CreateBuffer(wand::Buffer::Desc{
       .width = 256,
       .stride = 16,
-      .usage = wand::Buffer::kUsageConstantBuffer
+      .usage = wand::Buffer::kUsageConstantBuffer,
+      .mappable = true
     })
   };
 
-  if (!gd) {
+  if (!buffer->Map()) {
     return -1;
   }
+
+  buffer->Unmap();
 
   while (true) {
     MSG msg;

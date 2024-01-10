@@ -11,5 +11,19 @@ BufferD3D12::BufferD3D12(Desc const& desc, Microsoft::WRL::ComPtr<D3D12MA::Alloc
   srv_idx_{srv_idx},
   uav_idx_{uav_idx} {
 }
+
+auto BufferD3D12::Map() const -> void* {
+  void* ret;
+
+  if (FAILED(alloc_->GetResource()->Map(0, nullptr, &ret))) {
+    return nullptr;
+  }
+
+  return ret;
+}
+
+auto BufferD3D12::Unmap() const -> void {
+  alloc_->GetResource()->Unmap(0, nullptr);
+}
 }
 #endif

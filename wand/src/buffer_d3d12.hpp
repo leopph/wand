@@ -14,5 +14,7 @@ class BufferD3D12 final : public Buffer {
 
 public:
   BufferD3D12(Desc const& desc, Microsoft::WRL::ComPtr<D3D12MA::Allocation> alloc, std::uint32_t cbv_idx, std::uint32_t srv_idx, std::uint32_t uav_idx);
+  [[nodiscard]] auto Map() const -> void* override;
+  auto Unmap() const -> void override;
 };
 }

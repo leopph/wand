@@ -18,6 +18,7 @@ public:
     std::uint32_t width;
     std::uint32_t stride;
     Usage usage;
+    bool mappable;
   };
 
 protected:
@@ -33,6 +34,8 @@ public:
   auto operator=(Buffer&& other) -> void = delete;
 
   [[nodiscard]] auto GetDesc() const -> Desc const&;
+  [[nodiscard]] WANDAPI virtual auto Map() const -> void* = 0;
+  WANDAPI virtual auto Unmap() const -> void = 0;
 
 private:
   Desc desc_;
