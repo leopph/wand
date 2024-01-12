@@ -70,6 +70,40 @@ auto main() -> int {
 
   buffer->Unmap();
 
+  auto const tex{
+    gd->CreateTexture(wand::Texture::Desc{
+      .width = 1024,
+      .height = 1024,
+      .mip_count = 1,
+      .depth_or_array_size = 1,
+      .sample_count = 1,
+      .sample_quality = 0,
+      .render_target_clear_value = {},
+      .depth_clear_value = {},
+      .stencil_clear_value = {},
+      .format = wand::Texture::Format::kB8G8R8A8UnormSrgb,
+      .dimension = wand::Texture::Dimension::k2D,
+      .usage = wand::Texture::kUsageShaderResource
+    })
+  };
+
+  auto const rt{
+    gd->CreateTexture(wand::Texture::Desc{
+      .width = 2560,
+      .height = 1440,
+      .mip_count = 1,
+      .depth_or_array_size = 1,
+      .sample_count = 4,
+      .sample_quality = 0,
+      .render_target_clear_value = {0.0f, 0.0f, 0.0f, 1.0f},
+      .depth_clear_value = {},
+      .stencil_clear_value = {},
+      .format = wand::Texture::Format::kR16G16B16A16Float,
+      .dimension = wand::Texture::Dimension::k2D,
+      .usage = wand::Texture::Usage::kUsageRenderTarget
+    })
+  };
+
   while (true) {
     MSG msg;
     while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {

@@ -7,7 +7,7 @@
 namespace wand {
 class Buffer {
 public:
-  enum Usage : std::uint16_t {
+  enum Usage : std::uint8_t {
     kUsageNone = 0,
     kUsageConstantBuffer = 1 << 0,
     kUsageShaderResource = 1 << 1,

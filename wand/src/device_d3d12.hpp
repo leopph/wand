@@ -6,6 +6,7 @@
 #include <array>
 #include <cstdint>
 #include <limits>
+#include <mutex>
 #include <vector>
 
 namespace wand {
@@ -35,13 +36,28 @@ class DeviceD3D12 final : public Device {
   Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> rtv_heap_;
   Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> dsv_heap_;
 
-  std::vector<std::uint32_t> resource_descriptor_heap_free_indices_;
-  std::vector<std::uint32_t> rtv_heap_free_indices_;
-  std::vector<std::uint32_t> dsv_heap_free_indices_;
+  using ResViewIdxType = std::uint32_t;
+  using RtvIdxType = std::uint32_t;
+  using DsvIdxType = std::uint32_t;
+
+  std::mutex resource_desc_heap_index_mutex_;
+  std::vector<ResViewIdxType> resource_descriptor_heap_free_indices_;
+
+  std::mutex rtv_heap_index_mutex_;
+  std::vector<RtvIdxType> rtv_heap_free_indices_;
+
+  std::mutex dsv_heap_index_mutex_;
+  std::vector<DsvIdxType> dsv_heap_free_indices_;
 
   auto SignalAndWaitFence(ID3D12Fence* fence, UINT64 signal_value, UINT64 wait_value) const noexcept -> void;
   auto WaitForAllFrames() noexcept -> void;
   auto WaitForInFlightFrameLimit() noexcept -> void;
+
+  [[nodiscard]] auto CreateConstantBufferView(D3D12_CONSTANT_BUFFER_VIEW_DESC const& cbv_desc) -> ResViewIdxType;
+  [[nodiscard]] auto CreateShaderResourceView(ID3D12Resource* resource, D3D12_SHADER_RESOURCE_VIEW_DESC const& srv_desc) -> ResViewIdxType;
+  [[nodiscard]] auto CreateUnorderedAccessView(ID3D12Resource* resource, D3D12_UNORDERED_ACCESS_VIEW_DESC const& uav_desc) -> ResViewIdxType;
+  [[nodiscard]] auto CreateRenderTargetView(ID3D12Resource* resource, D3D12_RENDER_TARGET_VIEW_DESC const& rtv_desc) -> RtvIdxType;
+  [[nodiscard]] auto CreateDepthStencilView(ID3D12Resource* resource, D3D12_DEPTH_STENCIL_VIEW_DESC const& dsv_desc) -> DsvIdxType;
 
 public:
   explicit DeviceD3D12(HWND hwnd);
