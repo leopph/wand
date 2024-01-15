@@ -51,6 +51,11 @@ auto DeviceD3D12::CreateConstantBufferView(D3D12_CONSTANT_BUFFER_VIEW_DESC const
   return cbv_idx;
 }
 
+auto DeviceD3D12::ReleaseConstantBufferView(ResViewIdxType const idx) -> void {
+  std::unique_lock const lock{resource_desc_heap_index_mutex_};
+  resource_descriptor_heap_free_indices_.push_back(idx);
+}
+
 auto DeviceD3D12::CreateShaderResourceView(ID3D12Resource* const resource, D3D12_SHADER_RESOURCE_VIEW_DESC const& srv_desc) -> ResViewIdxType {
   resource_desc_heap_index_mutex_.lock();
   auto const srv_idx{resource_descriptor_heap_free_indices_.back()};
@@ -58,6 +63,11 @@ auto DeviceD3D12::CreateShaderResourceView(ID3D12Resource* const resource, D3D12
   resource_desc_heap_index_mutex_.unlock();
   device_->CreateShaderResourceView(resource, &srv_desc, CD3DX12_CPU_DESCRIPTOR_HANDLE{resource_descriptor_heap_->GetCPUDescriptorHandleForHeapStart(), static_cast<INT>(srv_idx), device_->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV)});
   return srv_idx;
+}
+
+auto DeviceD3D12::ReleaseShaderResourceView(ResViewIdxType const idx) -> void {
+  std::unique_lock const lock{resource_desc_heap_index_mutex_};
+  resource_descriptor_heap_free_indices_.push_back(idx);
 }
 
 auto DeviceD3D12::CreateUnorderedAccessView(ID3D12Resource* const resource, D3D12_UNORDERED_ACCESS_VIEW_DESC const& uav_desc) -> ResViewIdxType {
@@ -69,6 +79,11 @@ auto DeviceD3D12::CreateUnorderedAccessView(ID3D12Resource* const resource, D3D1
   return uav_idx;
 }
 
+auto DeviceD3D12::ReleaseUnorderedAccessView(ResViewIdxType const idx) -> void {
+  std::unique_lock const lock{resource_desc_heap_index_mutex_};
+  resource_descriptor_heap_free_indices_.push_back(idx);
+}
+
 auto DeviceD3D12::CreateRenderTargetView(ID3D12Resource* const resource, D3D12_RENDER_TARGET_VIEW_DESC const& rtv_desc) -> RtvIdxType {
   rtv_heap_index_mutex_.lock();
   auto const rtv_idx{rtv_heap_free_indices_.back()};
@@ -78,6 +93,11 @@ auto DeviceD3D12::CreateRenderTargetView(ID3D12Resource* const resource, D3D12_R
   return rtv_idx;
 }
 
+auto DeviceD3D12::ReleaseRenderTargetView(RtvIdxType const idx) -> void {
+  std::unique_lock const lock{rtv_heap_index_mutex_};
+  rtv_heap_free_indices_.push_back(idx);
+}
+
 auto DeviceD3D12::CreateDepthStencilView(ID3D12Resource* resource, D3D12_DEPTH_STENCIL_VIEW_DESC const& dsv_desc) -> DsvIdxType {
   dsv_heap_index_mutex_.lock();
   auto const dsv_idx{dsv_heap_free_indices_.back()};
@@ -85,6 +105,11 @@ auto DeviceD3D12::CreateDepthStencilView(ID3D12Resource* resource, D3D12_DEPTH_S
   dsv_heap_index_mutex_.unlock();
   device_->CreateDepthStencilView(resource, &dsv_desc, CD3DX12_CPU_DESCRIPTOR_HANDLE{dsv_heap_->GetCPUDescriptorHandleForHeapStart(), static_cast<INT>(dsv_idx), device_->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_DSV)});
   return dsv_idx;
+}
+
+auto DeviceD3D12::ReleaseDepthStencilView(DsvIdxType const idx) -> void {
+  std::unique_lock const lock{dsv_heap_index_mutex_};
+  dsv_heap_free_indices_.push_back(idx);
 }
 
 DeviceD3D12::DeviceD3D12(HWND const hwnd) {
@@ -267,7 +292,7 @@ auto DeviceD3D12::CreateBuffer(Buffer::Desc const& desc) -> std::unique_ptr<Buff
     uav_idx = CreateUnorderedAccessView(allocation->GetResource(), uav_desc);
   }
 
-  return std::make_unique<BufferD3D12>(desc, std::move(allocation), cbv_idx, srv_idx, uav_idx);
+  return std::make_unique<BufferD3D12>(desc, this, std::move(allocation), cbv_idx, srv_idx, uav_idx);
 }
 
 auto DeviceD3D12::CreateTexture(Texture::Desc const& desc) -> std::unique_ptr<Texture> {
@@ -576,7 +601,7 @@ auto DeviceD3D12::CreateTexture(Texture::Desc const& desc) -> std::unique_ptr<Te
     dsv_idx = CreateDepthStencilView(allocation->GetResource(), dsv_desc);
   }
 
-  return std::make_unique<TextureD3D12>(desc, std::move(allocation), srv_idx, uav_idx, rtv_idx, dsv_idx);
+  return std::make_unique<TextureD3D12>(desc, this, std::move(allocation), srv_idx, uav_idx, rtv_idx, dsv_idx);
 }
 }
 
