@@ -96,6 +96,7 @@
     <ClCompile Include="src\buffer_d3d12.cpp" />
     <ClCompile Include="src\device.cpp" />
     <ClCompile Include="src\device_d3d12.cpp" />
+    <ClCompile Include="src\pipeline_state_d3d12.cpp" />
     <ClCompile Include="src\texture.cpp" />
     <ClCompile Include="src\texture_d3d12.cpp" />
     <ClCompile Include="vendor\D3D12MemoryAllocator\D3D12MemAlloc.cpp">
@@ -106,10 +107,12 @@
   <ItemGroup>
     <ClInclude Include="include\buffer.hpp" />
     <ClInclude Include="include\core.hpp" />
+    <ClInclude Include="include\pipeline_state.hpp" />
     <ClInclude Include="include\texture.hpp" />
     <ClInclude Include="include\wand.hpp" />
     <ClInclude Include="src\buffer_d3d12.hpp" />
     <ClInclude Include="src\device_d3d12.hpp" />
+    <ClInclude Include="src\pipeline_state_d3d12.hpp" />
     <ClInclude Include="src\platform_d3d12.hpp" />
     <ClInclude Include="src\platform_win32.hpp" />
     <ClInclude Include="src\texture_d3d12.hpp" />

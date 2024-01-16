@@ -74,5 +74,6 @@ public:
 
   [[nodiscard]] auto CreateBuffer(Buffer::Desc const& desc) -> std::unique_ptr<Buffer> override;
   [[nodiscard]] auto CreateTexture(Texture::Desc const& desc) -> std::unique_ptr<Texture> override;
+  [[nodiscard]] auto CreatePipelineState(GraphicsPipelineStateInfo const& info) -> std::unique_ptr<PipelineState> override;
 };
 }

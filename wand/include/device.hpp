@@ -3,6 +3,7 @@
 #include "core.hpp"
 #include "buffer.hpp"
 #include "texture.hpp"
+#include "pipeline_state.hpp"
 
 #include <memory>
 
@@ -30,6 +31,7 @@ public:
 
   [[nodiscard]] virtual WANDAPI auto CreateBuffer(Buffer::Desc const& desc) -> std::unique_ptr<Buffer> = 0;
   [[nodiscard]] virtual WANDAPI auto CreateTexture(Texture::Desc const& desc) -> std::unique_ptr<Texture> = 0;
+  [[nodiscard]] virtual WANDAPI auto CreatePipelineState(GraphicsPipelineStateInfo const& info) -> std::unique_ptr<PipelineState> = 0;
 };
 
 enum ResourceViewFlags {
