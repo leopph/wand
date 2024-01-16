@@ -81,7 +81,7 @@ auto main() -> int {
       .render_target_clear_value = {},
       .depth_clear_value = {},
       .stencil_clear_value = {},
-      .format = wand::Texture::Format::kB8G8R8A8UnormSrgb,
+      .format = wand::Format::kB8G8R8A8UnormSrgb,
       .dimension = wand::Texture::Dimension::k2D,
       .usage = wand::Texture::kUsageShaderResource
     })
@@ -98,7 +98,7 @@ auto main() -> int {
       .render_target_clear_value = {0.0f, 0.0f, 0.0f, 1.0f},
       .depth_clear_value = {},
       .stencil_clear_value = {},
-      .format = wand::Texture::Format::kR16G16B16A16Float,
+      .format = wand::Format::kR16G16B16A16Float,
       .dimension = wand::Texture::Dimension::k2D,
       .usage = wand::Texture::Usage::kUsageRenderTarget
     })

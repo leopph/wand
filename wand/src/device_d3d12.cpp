@@ -17,8 +17,8 @@ auto ThrowIfFailed(HRESULT const hr) -> void {
   }
 }
 
-[[nodiscard]] auto FormatToDxgiFormat(wand::Texture::Format const format) -> DXGI_FORMAT {
-  return static_cast<DXGI_FORMAT>(format) /*Texture::Format is compatible with DXGI_FORMAT*/;
+[[nodiscard]] auto FormatToDxgiFormat(wand::Format const format) -> DXGI_FORMAT {
+  return static_cast<DXGI_FORMAT>(format) /*Format is compatible with DXGI_FORMAT*/;
 }
 }
 
