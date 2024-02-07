@@ -68,12 +68,15 @@ FormatToDxgiFormat(wand::Format const format) -> DXGI_FORMAT {
   switch (topology) {
     using enum wand::PrimitiveTopology;
   case kPointList: return D3D12_PRIMITIVE_TOPOLOGY_TYPE_POINT;
-  case kLineList: [[fallthrough]]; case kLineStrip: [[fallthrough]]; case
-  kLineListAdj: [[fallthrough]]; case kLineStripAdj: return
-      D3D12_PRIMITIVE_TOPOLOGY_TYPE_LINE;
-  case kTriangleFan: [[fallthrough]]; case kTriangleList: [[fallthrough]]; case
-  kTriangleListAdj: [[fallthrough]]; case kTriangleStrip: [[fallthrough]]; case
-  kTriangleStripAdj: return D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+  case kLineList: [[fallthrough]];
+  case kLineStrip: [[fallthrough]];
+  case kLineListAdj: [[fallthrough]];
+  case kLineStripAdj: return D3D12_PRIMITIVE_TOPOLOGY_TYPE_LINE;
+  case kTriangleFan: [[fallthrough]];
+  case kTriangleList: [[fallthrough]];
+  case kTriangleListAdj: [[fallthrough]];
+  case kTriangleStrip: [[fallthrough]];
+  case kTriangleStripAdj: return D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
   case kPatchList: return D3D12_PRIMITIVE_TOPOLOGY_TYPE_PATCH;
   }
 }
@@ -689,7 +692,8 @@ auto DeviceD3D12::CreateTexture(
   }
 
   return std::make_unique<TextureD3D12>(desc, this, std::move(allocation),
-                                        srv_idx, uav_idx, rtv_idx, dsv_idx);
+                                        srv_idx, uav_idx, rtv_idx, dsv_idx,
+                                        false);
 }
 
 auto DeviceD3D12::CreatePipelineState(
@@ -828,9 +832,11 @@ auto DeviceD3D12::CreatePipelineState(
   }
 
   Microsoft::WRL::ComPtr<ID3D12PipelineState> pso;
-  ThrowIfFailed(device_->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(&pso)));
+  ThrowIfFailed(
+    device_->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(&pso)));
 
-  return std::make_unique<PipelineStateD3D12>(std::move(root_signature), std::move(pso));
+  return std::make_unique<PipelineStateD3D12>(std::move(root_signature),
+                                              std::move(pso));
 }
 }
 
