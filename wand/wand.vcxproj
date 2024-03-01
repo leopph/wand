@@ -60,14 +60,15 @@
       <PreprocessorDefinitions>WAND_EXPORT;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>$(VULKAN_SDK)\Include;$(ProjectDir)include;$(ProjectDir)vendor\d3dx12;$(ProjectDir)vendor\D3D12MemoryAllocator;$(ProjectDir)vendor\VulkanMemoryAllocator</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)vendor\d3dx12;$(ProjectDir)vendor\D3D12MemoryAllocator</AdditionalIncludeDirectories>
       <LanguageStandard_C>stdc17</LanguageStandard_C>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>vulkan-1.lib;dxgi.lib;d3d12.lib;$(CoreLibraryDependencies);%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>$(VULKAN_SDK)\Lib</AdditionalLibraryDirectories>
+      <AdditionalDependencies>dxgi.lib;d3d12.lib;$(CoreLibraryDependencies);%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>
+      </AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -78,7 +79,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>WAND_EXPORT;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(VULKAN_SDK)\Include;$(ProjectDir)include;$(ProjectDir)vendor\d3dx12;$(ProjectDir)vendor\D3D12MemoryAllocator;$(ProjectDir)vendor\VulkanMemoryAllocator</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)vendor\d3dx12;$(ProjectDir)vendor\D3D12MemoryAllocator</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <LanguageStandard_C>stdc17</LanguageStandard_C>
     </ClCompile>
@@ -87,8 +88,9 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>vulkan-1.lib;dxgi.lib;d3d12.lib;$(CoreLibraryDependencies);%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>$(VULKAN_SDK)\Lib</AdditionalLibraryDirectories>
+      <AdditionalDependencies>dxgi.lib;d3d12.lib;$(CoreLibraryDependencies);%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>
+      </AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>

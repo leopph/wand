@@ -52,7 +52,7 @@ auto main() -> int {
 
   ShowWindow(hwnd.get(), SW_SHOW);
 
-  auto const gd{wand::Device::New(hwnd.get(), wand::GraphicsApi::kD3D12)};
+  auto const gd{wand::Device::New(hwnd.get())};
 
   if (!gd) {
     return -1;

@@ -8,12 +8,6 @@
 #include <memory>
 
 namespace wand {
-enum class GraphicsApi {
-#ifdef _WIN64
-  kD3D12 = 0,
-#endif
-};
-
 class Device {
 protected:
   Device() = default;
@@ -27,7 +21,7 @@ public:
   auto operator=(Device const& other) -> void = delete;
   auto operator=(Device&& other) -> void = delete;
 
-  [[nodiscard]] WANDAPI static auto New(void* window_handle, GraphicsApi api) -> std::unique_ptr<Device>;
+  [[nodiscard]] WANDAPI static auto New(void* window_handle) -> std::unique_ptr<Device>;
 
   [[nodiscard]] virtual WANDAPI auto CreateBuffer(Buffer::Desc const& desc) -> std::unique_ptr<Buffer> = 0;
   [[nodiscard]] virtual WANDAPI auto CreateTexture(Texture::Desc const& desc) -> std::unique_ptr<Texture> = 0;
