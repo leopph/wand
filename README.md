@@ -1,8 +1,14 @@
-# wand
-A graphics API abstraction layer based on D3D12 and Vulkan using the latest features and technologies.
+# 🪄 wand 🪄
+An abstraction layer over D3D12 using the latest features.
 
-## Planned features
-The following is a non-exhaustive list:
-- D3D12 and Vulkan support
-- Bindless resource management (requires resource binding tier 3 and shader model 6.6)
-- Internal command list dependency management without exposing fences and semaphores
+## Goals
+- Automatic memory management
+- Automatic barrier management
+- Bindless resource access without views
+- Easy ordering and synchronization of command lists
+
+## Used D3D12 features
+- HLSL Dynamic Resources (ResourceDescriptorHeap, SamplerDescriptorHeap)
+- Enhanced barriers
+- GPU upload heaps
+- Mesh shaders
