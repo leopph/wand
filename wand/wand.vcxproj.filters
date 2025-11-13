@@ -18,10 +18,22 @@
     <ClCompile Include="src\wand.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\deps\D3D12MemoryAllocator\src\D3D12MemAlloc.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="include\wand.hpp">
+    <ClInclude Include="include\wand\wand.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="include\wand\util.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="packages.config" />
+    <None Include="include\wand\util.inl">
+      <Filter>Header Files</Filter>
+    </None>
   </ItemGroup>
 </Project>
