@@ -42,10 +42,10 @@ private:
   GraphicsDevice* device_;
 };
 
-extern template DeviceChildDeleter<Buffer>;
-extern template DeviceChildDeleter<Texture>;
-extern template DeviceChildDeleter<PipelineState>;
-extern template DeviceChildDeleter<CommandList>;
-extern template DeviceChildDeleter<Fence>;
-extern template DeviceChildDeleter<SwapChain>;
+extern template class DeviceChildDeleter<Buffer>;
+extern template class DeviceChildDeleter<Texture>;
+extern template class DeviceChildDeleter<PipelineState>;
+extern template class DeviceChildDeleter<CommandList>;
+extern template class DeviceChildDeleter<Fence>;
+extern template class DeviceChildDeleter<SwapChain>;
 }

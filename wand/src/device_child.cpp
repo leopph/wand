@@ -27,4 +27,11 @@ auto DeviceChildDeleter<T>::operator()(T const* device_child) -> void {
     }
   }
 }
+
+template class DeviceChildDeleter<Buffer>;
+template class DeviceChildDeleter<Texture>;
+template class DeviceChildDeleter<PipelineState>;
+template class DeviceChildDeleter<CommandList>;
+template class DeviceChildDeleter<Fence>;
+template class DeviceChildDeleter<SwapChain>;
 }
