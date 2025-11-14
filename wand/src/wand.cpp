@@ -1,4 +1,4 @@
-#include "wand.hpp"
+#include "wand/wand.hpp"
 
 #include <dxgidebug.h>
 
@@ -12,7 +12,8 @@
 #include <utility>
 #include <vector>
 
-#include "util.hpp"
+#include "wand/format.hpp"
+#include "wand/util.hpp"
 
 using Microsoft::WRL::ComPtr;
 
@@ -32,13 +33,6 @@ UINT const GraphicsDevice::sampler_heap_size_{2048};
 
 
 namespace {
-auto ThrowIfFailed(HRESULT const hr, std::string_view const msg) -> void {
-  if (FAILED(hr)) {
-    throw std::runtime_error{msg.data()};
-  }
-}
-
-
 auto AsD3d12Desc(BufferDesc const& desc) -> D3D12_RESOURCE_DESC1 {
   auto flags{D3D12_RESOURCE_FLAG_NONE};
 
@@ -90,151 +84,6 @@ auto AsD3d12Desc(TextureDesc const& desc) -> D3D12_RESOURCE_DESC1 {
 
   throw std::runtime_error{"Trying to convert invalid an TextureDesc to D3D12_RESOURCE_DESC1."};
 }
-}
-
-
-namespace details {
-auto DescriptorHeap::Allocate() -> UINT {
-  std::scoped_lock const lock{mutex_};
-
-  if (free_indices_.empty()) {
-    auto const old_reserve_count{reserved_idx_count_};
-    reserved_idx_count_ = std::min(heap_size_, reserved_idx_count_ * 2);
-
-    if (old_reserve_count == reserved_idx_count_) {
-      throw std::runtime_error{"Failed to allocate descriptor heap indices: the heap is full."};
-    }
-
-    free_indices_.reserve(reserved_idx_count_ - old_reserve_count);
-
-    for (UINT idx{old_reserve_count}; idx < reserved_idx_count_; idx++) {
-      free_indices_.emplace_back(idx);
-    }
-
-    // TODO start descriptor heap itself small, grow it on demand
-  }
-
-  auto const idx{free_indices_.back()};
-  free_indices_.pop_back();
-  return idx;
-}
-
-
-auto DescriptorHeap::Release(UINT const index) -> void {
-  if (index == kInvalidResourceIndex) {
-    return;
-  }
-
-  std::scoped_lock const lock{mutex_};
-  free_indices_.insert(std::ranges::upper_bound(free_indices_, index), index);
-  free_indices_.erase(std::ranges::unique(free_indices_).begin(), free_indices_.end());
-}
-
-
-auto DescriptorHeap::GetDescriptorCpuHandle(UINT const descriptor_index) const -> D3D12_CPU_DESCRIPTOR_HANDLE {
-  if (descriptor_index >= reserved_idx_count_) {
-    throw std::runtime_error{"Failed to convert descriptor index to CPU handle: descriptor index is out of range."};
-  }
-
-  return CD3DX12_CPU_DESCRIPTOR_HANDLE{
-    heap_->GetCPUDescriptorHandleForHeapStart(), static_cast<INT>(descriptor_index), increment_size_
-  };
-}
-
-
-auto DescriptorHeap::GetDescriptorGpuHandle(UINT const descriptor_index) const -> D3D12_GPU_DESCRIPTOR_HANDLE {
-  if (descriptor_index >= reserved_idx_count_) {
-    throw std::runtime_error{"Failed to convert descriptor index to GPU handle: descriptor index is out of range."};
-  }
-
-  return CD3DX12_GPU_DESCRIPTOR_HANDLE{
-    heap_->GetGPUDescriptorHandleForHeapStart(), static_cast<INT>(descriptor_index), increment_size_
-  };
-}
-
-
-auto DescriptorHeap::GetInternalPtr() const -> ID3D12DescriptorHeap* {
-  return heap_.Get();
-}
-
-
-DescriptorHeap::DescriptorHeap(ComPtr<ID3D12DescriptorHeap> heap, ID3D12Device& device) :
-  heap_{std::move(heap)},
-  increment_size_{device.GetDescriptorHandleIncrementSize(heap_->GetDesc().Type)},
-  reserved_idx_count_{1},
-  heap_size_{heap_->GetDesc().NumDescriptors} {
-  free_indices_.reserve(reserved_idx_count_);
-  for (UINT idx{0}; idx < reserved_idx_count_; idx++) {
-    free_indices_.emplace_back(idx);
-  }
-}
-
-
-auto RootSignatureCache::Add(std::uint8_t const num_params,
-                             ComPtr<ID3D12RootSignature> root_signature) -> ComPtr<ID3D12RootSignature> {
-  std::scoped_lock const lock{mutex_};
-  return root_signatures_.try_emplace(num_params, std::move(root_signature)).first->second;
-}
-
-
-auto RootSignatureCache::Get(std::uint8_t const num_params) -> ComPtr<ID3D12RootSignature> {
-  std::scoped_lock const lock{mutex_};
-
-  if (auto const it{root_signatures_.find(num_params)}; it != std::end(root_signatures_)) {
-    return it->second;
-  }
-
-  return nullptr;
-}
-}
-
-
-auto MakeDepthTypeless(DXGI_FORMAT const depth_format) -> DXGI_FORMAT {
-  if (depth_format == DXGI_FORMAT_D32_FLOAT_S8X24_UINT) {
-    return DXGI_FORMAT_R32G8X24_TYPELESS;
-  }
-
-  if (depth_format == DXGI_FORMAT_D32_FLOAT) {
-    return DXGI_FORMAT_R32_TYPELESS;
-  }
-
-  if (depth_format == DXGI_FORMAT_D24_UNORM_S8_UINT) {
-    return DXGI_FORMAT_R24G8_TYPELESS;
-  }
-
-  if (depth_format == DXGI_FORMAT_D16_UNORM) {
-    return DXGI_FORMAT_R16_TYPELESS;
-  }
-
-  return depth_format;
-}
-
-
-auto MakeDepthUnderlyingLinear(DXGI_FORMAT const depth_format) -> DXGI_FORMAT {
-  if (depth_format == DXGI_FORMAT_D32_FLOAT_S8X24_UINT) {
-    return DXGI_FORMAT_R32_FLOAT_X8X24_TYPELESS;
-  }
-
-  if (depth_format == DXGI_FORMAT_D32_FLOAT) {
-    return DXGI_FORMAT_R32_FLOAT;
-  }
-
-  if (depth_format == DXGI_FORMAT_D24_UNORM_S8_UINT) {
-    return DXGI_FORMAT_R24_UNORM_X8_TYPELESS;
-  }
-
-  if (depth_format == DXGI_FORMAT_D16_UNORM) {
-    return DXGI_FORMAT_R16_UNORM;
-  }
-
-  return depth_format;
-}
-
-
-auto GetActualMipLevels(TextureDesc const& desc) -> UINT {
-  return desc.mip_levels == 0
-           ? static_cast<UINT16>(std::ceil(std::max(std::log2(desc.width), std::log2(desc.height)) + 1))
-           : desc.mip_levels;
 }
 
 
@@ -384,7 +233,7 @@ auto GraphicsDevice::CreateBuffer(BufferDesc const& desc,
 
   return SharedDeviceChildHandle<Buffer>{
     new Buffer{std::move(allocation), std::move(resource), cbv, srv, uav, desc},
-    details::DeviceChildDeleter<Buffer>{*this}
+    DeviceChildDeleter<Buffer>{*this}
   };
 }
 
@@ -420,7 +269,7 @@ auto GraphicsDevice::CreateTexture(TextureDesc const& desc,
 
   return SharedDeviceChildHandle<Texture>{
     new Texture{std::move(allocation), std::move(resource), std::move(dsvs), std::move(rtvs), srv, uav, desc},
-    details::DeviceChildDeleter<Texture>{*this}
+    DeviceChildDeleter<Texture>{*this}
   };
 }
 
@@ -491,7 +340,7 @@ auto GraphicsDevice::CreatePipelineState(PipelineDesc const& desc,
       std::move(root_signature), std::move(pipeline_state), num_32_bit_params, desc.cs.BytecodeLength != 0,
       desc.depth_stencil_state.DepthEnable && desc.depth_stencil_state.DepthWriteMask != D3D12_DEPTH_WRITE_MASK_ZERO
     },
-    details::DeviceChildDeleter<PipelineState>{*this}
+    DeviceChildDeleter<PipelineState>{*this}
   };
 }
 
@@ -511,7 +360,7 @@ auto GraphicsDevice::CreateCommandList() -> SharedDeviceChildHandle<CommandList>
       std::move(allocator), std::move(cmd_list), dsv_heap_.get(), rtv_heap_.get(), res_desc_heap_.get(),
       sampler_heap_.get(), &root_signatures_
     },
-    details::DeviceChildDeleter<CommandList>{*this}
+    DeviceChildDeleter<CommandList>{*this}
   };
 }
 
@@ -521,7 +370,7 @@ auto GraphicsDevice::CreateFence(UINT64 const initial_value) -> SharedDeviceChil
   ThrowIfFailed(device_->CreateFence(initial_value, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence)),
                 "Failed to create fence.");
   return SharedDeviceChildHandle<Fence>{
-    new Fence{std::move(fence), initial_value + 1}, details::DeviceChildDeleter<Fence>{*this}
+    new Fence{std::move(fence), initial_value + 1}, DeviceChildDeleter<Fence>{*this}
   };
 }
 
@@ -546,7 +395,7 @@ auto GraphicsDevice::CreateSwapChain(SwapChainDesc const& desc,
   auto const swap_chain{new SwapChain{std::move(swap_chain4), present_flags_}};
   SwapChainCreateTextures(*swap_chain);
 
-  return SharedDeviceChildHandle<SwapChain>{swap_chain, details::DeviceChildDeleter<SwapChain>{*this}};
+  return SharedDeviceChildHandle<SwapChain>{swap_chain, DeviceChildDeleter<SwapChain>{*this}};
 }
 
 
@@ -658,7 +507,7 @@ auto GraphicsDevice::CreateAliasingResources(std::span<BufferDesc const> const b
       UINT uav;
       CreateBufferViews(*resource.Get(), buf_desc, cbv, srv, uav);
       buffers->emplace_back(new Buffer{buf_alloc, std::move(resource), cbv, srv, uav, buf_desc},
-                            details::DeviceChildDeleter<Buffer>{*this});
+                            DeviceChildDeleter<Buffer>{*this});
     }
   }
 
@@ -680,7 +529,7 @@ auto GraphicsDevice::CreateAliasingResources(std::span<BufferDesc const> const b
       CreateTextureViews(*resource.Get(), info.desc, dsvs, rtvs, srv, uav);
       textures->emplace_back(new Texture{
                                alloc, std::move(resource), std::move(dsvs), std::move(rtvs), srv, uav, info.desc
-                             }, details::DeviceChildDeleter<Texture>{*this});
+                             }, DeviceChildDeleter<Texture>{*this});
     }
   }
 }
@@ -898,8 +747,8 @@ auto GraphicsDevice::SwapChainCreateTextures(SwapChain& swap_chain) -> void {
 
     swap_chain.textures_.emplace_back(new Texture{
                                         nullptr, std::move(buf), {}, std::move(rtvs), srv,
-                                        details::kInvalidResourceIndex, tex_desc
-                                      }, details::DeviceChildDeleter<Texture>{*this});
+                                        kInvalidResourceIndex, tex_desc
+                                      }, DeviceChildDeleter<Texture>{*this});
   }
 }
 
@@ -911,7 +760,7 @@ auto GraphicsDevice::CreateBufferViews(ID3D12Resource2& buffer, BufferDesc const
     D3D12_CONSTANT_BUFFER_VIEW_DESC const cbv_desc{buffer.GetGPUVirtualAddress(), static_cast<UINT>(desc.size)};
     device_->CreateConstantBufferView(&cbv_desc, res_desc_heap_->GetDescriptorCpuHandle(cbv));
   } else {
-    cbv = details::kInvalidResourceIndex;
+    cbv = kInvalidResourceIndex;
   }
 
   if (desc.shader_resource) {
@@ -926,7 +775,7 @@ auto GraphicsDevice::CreateBufferViews(ID3D12Resource2& buffer, BufferDesc const
     };
     device_->CreateShaderResourceView(&buffer, &srv_desc, res_desc_heap_->GetDescriptorCpuHandle(srv));
   } else {
-    srv = details::kInvalidResourceIndex;
+    srv = kInvalidResourceIndex;
   }
 
   if (desc.unordered_access) {
@@ -941,7 +790,7 @@ auto GraphicsDevice::CreateBufferViews(ID3D12Resource2& buffer, BufferDesc const
     };
     device_->CreateUnorderedAccessView(&buffer, nullptr, &uav_desc, res_desc_heap_->GetDescriptorCpuHandle(uav));
   } else {
-    uav = details::kInvalidResourceIndex;
+    uav = kInvalidResourceIndex;
   }
 }
 
@@ -1212,582 +1061,5 @@ auto GraphicsDevice::MakeHeapType(CpuAccess const cpu_access) const -> D3D12_HEA
   }
 
   throw std::runtime_error{"Failed to make D3D12 heap type: unknown CPU access type."};
-}
-
-
-auto Resource::SetDebugName(std::wstring_view const name) const -> void {
-  ThrowIfFailed(resource_->SetName(name.data()), "Failed to set D3D12 resource debug name.");
-}
-
-
-auto Resource::Map() const -> void* {
-  return InternalMap(0, nullptr);
-}
-
-
-auto Resource::Unmap() const -> void {
-  InternalUnmap(0, nullptr);
-}
-
-
-auto Resource::GetShaderResource() const -> UINT {
-  return srv_.value();
-}
-
-
-auto Resource::GetUnorderedAccess() const -> UINT {
-  return uav_.value();
-}
-
-
-auto Resource::GetInternalResource() const -> ID3D12Resource2* {
-  return resource_.Get();
-}
-
-
-Resource::Resource(ComPtr<D3D12MA::Allocation> allocation, ComPtr<ID3D12Resource2> resource,
-                   std::optional<UINT> const srv, std::optional<UINT> const uav) :
-  allocation_{std::move(allocation)},
-  resource_{std::move(resource)},
-  srv_{srv},
-  uav_{uav} {
-}
-
-
-auto Resource::InternalMap(UINT const subresource, D3D12_RANGE const* read_range) const -> void* {
-  void* mapped;
-  ThrowIfFailed(resource_->Map(subresource, read_range, &mapped), "Failed to map D3D12 resource.");
-  return mapped;
-}
-
-
-auto Resource::InternalUnmap(UINT const subresource, D3D12_RANGE const* written_range) const -> void {
-  resource_->Unmap(subresource, written_range);
-}
-
-
-auto Buffer::GetDesc() const -> BufferDesc const& {
-  return desc_;
-}
-
-
-auto Buffer::GetConstantBuffer() const -> UINT {
-  return cbv_.value();
-}
-
-
-Buffer::Buffer(ComPtr<D3D12MA::Allocation> allocation, ComPtr<ID3D12Resource2> resource, std::optional<UINT> const cbv,
-               std::optional<UINT> const srv, std::optional<UINT> const uav, BufferDesc const& desc) :
-  Resource{std::move(allocation), std::move(resource), srv, uav},
-  desc_{desc},
-  cbv_{cbv} {
-}
-
-
-auto Texture::GetDesc() const -> TextureDesc const& {
-  return desc_;
-}
-
-
-auto Texture::Map(UINT const subresource) const -> void* {
-  return InternalMap(subresource, nullptr);
-}
-
-
-auto Texture::Unmap(UINT const subresource) const -> void {
-  InternalUnmap(subresource, nullptr);
-}
-
-
-auto Texture::GetDepthStencilView(UINT const mip_index) const -> UINT {
-  return dsvs_.at(mip_index);
-}
-
-
-auto Texture::GetRenderTargetView(UINT const mip_index) const -> UINT {
-  return rtvs_.at(mip_index);
-}
-
-
-Texture::Texture(ComPtr<D3D12MA::Allocation> allocation, ComPtr<ID3D12Resource2> resource, std::vector<UINT> dsvs,
-                 std::vector<UINT> rtvs, std::optional<UINT> const srv, std::optional<UINT> const uav,
-                 TextureDesc const& desc) :
-  Resource{std::move(allocation), std::move(resource), srv, uav},
-  desc_{desc},
-  dsvs_{std::move(dsvs)},
-  rtvs_{std::move(rtvs)} {
-}
-
-
-PipelineState::PipelineState(ComPtr<ID3D12RootSignature> root_signature, ComPtr<ID3D12PipelineState> pipeline_state,
-                             std::uint8_t const num_params, bool const is_compute, bool const allows_ds_write) :
-  root_signature_{std::move(root_signature)},
-  pipeline_state_{std::move(pipeline_state)},
-  num_params_{num_params},
-  is_compute_{is_compute},
-  allows_ds_write_{allows_ds_write} {
-}
-
-
-auto CommandList::Begin(PipelineState const* pipeline_state) -> void {
-  ThrowIfFailed(allocator_->Reset(), "Failed to reset command allocator.");
-  ThrowIfFailed(cmd_list_->Reset(allocator_.Get(), pipeline_state ? pipeline_state->pipeline_state_.Get() : nullptr),
-                "Failed to reset command list.");
-  cmd_list_->SetDescriptorHeaps(2,
-                                std::array{res_desc_heap_->GetInternalPtr(), sampler_heap_->GetInternalPtr()}.data());
-  compute_pipeline_set_ = pipeline_state && pipeline_state->is_compute_;
-  SetRootSignature(pipeline_state ? pipeline_state->num_params_ : 0);
-  local_resource_states_.Clear();
-  pending_barriers_.clear();
-}
-
-
-auto CommandList::End() const -> void {
-  ThrowIfFailed(cmd_list_->Close(), "Failed to close command list.");
-}
-
-
-auto CommandList::ClearDepthStencil(Texture const& tex, D3D12_CLEAR_FLAGS const clear_flags, FLOAT const depth,
-                                    UINT8 const stencil, std::span<D3D12_RECT const> const rects,
-                                    UINT16 const mip_level) -> void {
-  GenerateBarrier(tex, D3D12_BARRIER_SYNC_DEPTH_STENCIL, D3D12_BARRIER_ACCESS_DEPTH_STENCIL_WRITE,
-                  D3D12_BARRIER_LAYOUT_DEPTH_STENCIL_WRITE);
-
-  cmd_list_->ClearDepthStencilView(dsv_heap_->GetDescriptorCpuHandle(tex.GetDepthStencilView(mip_level)), clear_flags,
-                                   depth, stencil,
-                                   static_cast<UINT>(rects.size()), rects.data());
-}
-
-
-auto CommandList::ClearRenderTarget(Texture const& tex, std::span<FLOAT const, 4> const color_rgba,
-                                    std::span<D3D12_RECT const> const rects, UINT16 const mip_level) -> void {
-  GenerateBarrier(tex, D3D12_BARRIER_SYNC_RENDER_TARGET, D3D12_BARRIER_ACCESS_RENDER_TARGET,
-                  D3D12_BARRIER_LAYOUT_RENDER_TARGET);
-
-  cmd_list_->ClearRenderTargetView(rtv_heap_->GetDescriptorCpuHandle(tex.GetRenderTargetView(mip_level)),
-                                   color_rgba.data(),
-                                   static_cast<UINT>(rects.size()), rects.data());
-}
-
-
-auto CommandList::CopyBuffer(Buffer const& dst, Buffer const& src) -> void {
-  GenerateBarrier(src, D3D12_BARRIER_SYNC_COPY, D3D12_BARRIER_ACCESS_COPY_SOURCE);
-  GenerateBarrier(dst, D3D12_BARRIER_SYNC_COPY, D3D12_BARRIER_ACCESS_COPY_DEST);
-  cmd_list_->CopyResource(dst.GetInternalResource(), src.GetInternalResource());
-}
-
-
-auto CommandList::CopyBufferRegion(Buffer const& dst, UINT64 const dst_offset, Buffer const& src,
-                                   UINT64 const src_offset, UINT64 const num_bytes) -> void {
-  GenerateBarrier(src, D3D12_BARRIER_SYNC_COPY, D3D12_BARRIER_ACCESS_COPY_SOURCE);
-  GenerateBarrier(dst, D3D12_BARRIER_SYNC_COPY, D3D12_BARRIER_ACCESS_COPY_DEST);
-  cmd_list_->CopyBufferRegion(dst.GetInternalResource(), dst_offset, src.GetInternalResource(), src_offset, num_bytes);
-}
-
-
-auto CommandList::CopyTexture(Texture const& dst, Texture const& src) -> void {
-  GenerateBarrier(src, D3D12_BARRIER_SYNC_COPY, D3D12_BARRIER_ACCESS_COPY_SOURCE,
-                  D3D12_BARRIER_LAYOUT_DIRECT_QUEUE_COPY_SOURCE);
-  GenerateBarrier(dst, D3D12_BARRIER_SYNC_COPY, D3D12_BARRIER_ACCESS_COPY_DEST,
-                  D3D12_BARRIER_LAYOUT_DIRECT_QUEUE_COPY_DEST);
-  cmd_list_->CopyResource(dst.GetInternalResource(), src.GetInternalResource());
-}
-
-
-auto CommandList::CopyTextureRegion(Texture const& dst, UINT const dst_subresource_index, UINT const dst_x,
-                                    UINT const dst_y, UINT const dst_z, Texture const& src,
-                                    UINT const src_subresource_index, D3D12_BOX const* src_box) -> void {
-  GenerateBarrier(src, D3D12_BARRIER_SYNC_COPY, D3D12_BARRIER_ACCESS_COPY_SOURCE,
-                  D3D12_BARRIER_LAYOUT_DIRECT_QUEUE_COPY_SOURCE);
-  GenerateBarrier(dst, D3D12_BARRIER_SYNC_COPY, D3D12_BARRIER_ACCESS_COPY_DEST,
-                  D3D12_BARRIER_LAYOUT_DIRECT_QUEUE_COPY_DEST);
-
-  D3D12_TEXTURE_COPY_LOCATION const dst_loc{
-    .pResource = dst.GetInternalResource(), .Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX,
-    .SubresourceIndex = dst_subresource_index
-  };
-  D3D12_TEXTURE_COPY_LOCATION const src_loc{
-    .pResource = src.GetInternalResource(), .Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX,
-    .SubresourceIndex = src_subresource_index
-  };
-  cmd_list_->CopyTextureRegion(&dst_loc, dst_x, dst_y, dst_z, &src_loc, src_box);
-}
-
-
-auto CommandList::CopyTextureRegion(Texture const& dst, UINT const dst_subresource_index, UINT const dst_x,
-                                    UINT const dst_y, UINT const dst_z, Buffer const& src,
-                                    D3D12_PLACED_SUBRESOURCE_FOOTPRINT const& src_footprint) -> void {
-  GenerateBarrier(src, D3D12_BARRIER_SYNC_COPY, D3D12_BARRIER_ACCESS_COPY_SOURCE);
-  GenerateBarrier(dst, D3D12_BARRIER_SYNC_COPY, D3D12_BARRIER_ACCESS_COPY_DEST,
-                  D3D12_BARRIER_LAYOUT_DIRECT_QUEUE_COPY_DEST);
-  D3D12_TEXTURE_COPY_LOCATION const dst_loc{
-    .pResource = dst.GetInternalResource(), .Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX,
-    .SubresourceIndex = dst_subresource_index
-  };
-  D3D12_TEXTURE_COPY_LOCATION const src_loc{
-    .pResource = src.GetInternalResource(), .Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT,
-    .PlacedFootprint = src_footprint
-  };
-  cmd_list_->CopyTextureRegion(&dst_loc, dst_x, dst_y, dst_z, &src_loc, nullptr);
-}
-
-
-auto CommandList::DiscardRenderTarget(Texture const& tex, std::optional<D3D12_DISCARD_REGION> const& region) -> void {
-  GenerateBarrier(tex, D3D12_BARRIER_SYNC_RENDER_TARGET, D3D12_BARRIER_ACCESS_RENDER_TARGET,
-                  D3D12_BARRIER_LAYOUT_RENDER_TARGET);
-  cmd_list_->DiscardResource(tex.GetInternalResource(), region ? &*region : nullptr);
-}
-
-
-auto CommandList::DiscardDepthStencil(Texture const& tex, std::optional<D3D12_DISCARD_REGION> const& region) -> void {
-  GenerateBarrier(tex, D3D12_BARRIER_SYNC_DEPTH_STENCIL, D3D12_BARRIER_ACCESS_DEPTH_STENCIL_WRITE,
-                  D3D12_BARRIER_LAYOUT_DEPTH_STENCIL_WRITE);
-  cmd_list_->DiscardResource(tex.GetInternalResource(), region ? &*region : nullptr);
-}
-
-
-auto CommandList::Dispatch(UINT const thread_group_count_x, UINT const thread_group_count_y,
-                           UINT const thread_group_count_z) const -> void {
-  cmd_list_->Dispatch(thread_group_count_x, thread_group_count_y, thread_group_count_z);
-}
-
-
-auto CommandList::DispatchMesh(UINT const thread_group_count_x, UINT const thread_group_count_y,
-                               UINT const thread_group_count_z) const -> void {
-  cmd_list_->DispatchMesh(thread_group_count_x, thread_group_count_y, thread_group_count_z);
-}
-
-
-auto CommandList::DrawIndexedInstanced(UINT const index_count_per_instance, UINT const instance_count,
-                                       UINT const start_index_location, INT const base_vertex_location,
-                                       UINT const start_instance_location) const -> void {
-  std::array const offsets{*std::bit_cast<UINT const*>(&base_vertex_location), start_instance_location};
-  cmd_list_->SetGraphicsRoot32BitConstants(1, static_cast<UINT>(offsets.size()), offsets.data(), 0);
-  cmd_list_->DrawIndexedInstanced(index_count_per_instance, instance_count, start_index_location, base_vertex_location,
-                                  start_instance_location);
-}
-
-
-auto CommandList::DrawInstanced(UINT const vertex_count_per_instance, UINT const instance_count,
-                                UINT const start_vertex_location, UINT const start_instance_location) const -> void {
-  std::array const offsets{0u, start_instance_location};
-  cmd_list_->SetGraphicsRoot32BitConstants(1, static_cast<UINT>(offsets.size()), offsets.data(), 0);
-  cmd_list_->DrawInstanced(vertex_count_per_instance, instance_count, start_vertex_location, start_instance_location);
-}
-
-
-auto CommandList::Resolve(Texture const& dst, Texture const& src, DXGI_FORMAT const format) -> void {
-  GenerateBarrier(src, D3D12_BARRIER_SYNC_RESOLVE, D3D12_BARRIER_ACCESS_RESOLVE_SOURCE,
-                  D3D12_BARRIER_LAYOUT_RESOLVE_SOURCE);
-  GenerateBarrier(dst, D3D12_BARRIER_SYNC_RESOLVE, D3D12_BARRIER_ACCESS_RESOLVE_DEST,
-                  D3D12_BARRIER_LAYOUT_RESOLVE_DEST);
-  cmd_list_->ResolveSubresource(dst.GetInternalResource(), 0, src.GetInternalResource(), 0, format);
-}
-
-
-auto CommandList::SetBlendFactor(std::span<FLOAT const, 4> const blend_factor) const -> void {
-  cmd_list_->OMSetBlendFactor(blend_factor.data());
-}
-
-
-auto CommandList::SetIndexBuffer(Buffer const& buf, DXGI_FORMAT const index_format) -> void {
-  GenerateBarrier(buf, D3D12_BARRIER_SYNC_VERTEX_SHADING, D3D12_BARRIER_ACCESS_INDEX_BUFFER);
-  D3D12_INDEX_BUFFER_VIEW const ibv{
-    buf.GetInternalResource()->GetGPUVirtualAddress(), static_cast<UINT>(buf.GetInternalResource()->GetDesc1().Width),
-    index_format
-  };
-  cmd_list_->IASetIndexBuffer(&ibv);
-}
-
-
-auto CommandList::SetPrimitiveTopology(D3D12_PRIMITIVE_TOPOLOGY const primitive_topology) const -> void {
-  cmd_list_->IASetPrimitiveTopology(primitive_topology);
-}
-
-
-auto CommandList::SetRenderTargets(std::span<Texture const* const> const render_targets,
-                                   Texture const* const depth_stencil, UINT16 const mip_level) -> void {
-  std::ranges::for_each(render_targets, [this](Texture const* const tex) {
-    if (tex) {
-      GenerateBarrier(*tex, D3D12_BARRIER_SYNC_RENDER_TARGET, D3D12_BARRIER_ACCESS_RENDER_TARGET,
-                      D3D12_BARRIER_LAYOUT_RENDER_TARGET);
-    }
-  });
-
-  if (depth_stencil) {
-    GenerateBarrier(*depth_stencil, D3D12_BARRIER_SYNC_DEPTH_STENCIL,
-                    pipeline_allows_ds_write_
-                      ? D3D12_BARRIER_ACCESS_DEPTH_STENCIL_WRITE
-                      : D3D12_BARRIER_ACCESS_DEPTH_STENCIL_READ,
-                    pipeline_allows_ds_write_
-                      ? D3D12_BARRIER_LAYOUT_DEPTH_STENCIL_WRITE
-                      : D3D12_BARRIER_LAYOUT_DEPTH_STENCIL_READ);
-  }
-
-  std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> rt_handles;
-  rt_handles.reserve(render_targets.size());
-  std::ranges::transform(render_targets, std::back_inserter(rt_handles), [this, mip_level](Texture const* const tex) {
-    return tex ? rtv_heap_->GetDescriptorCpuHandle(tex->GetRenderTargetView(mip_level)) : D3D12_CPU_DESCRIPTOR_HANDLE{};
-  });
-
-  auto const ds_handle{
-    depth_stencil
-      ? dsv_heap_->GetDescriptorCpuHandle(depth_stencil->GetDepthStencilView(mip_level))
-      : D3D12_CPU_DESCRIPTOR_HANDLE{}
-  };
-
-  cmd_list_->OMSetRenderTargets(static_cast<UINT>(rt_handles.size()), rt_handles.data(), FALSE,
-                                depth_stencil ? &ds_handle : nullptr);
-}
-
-
-auto CommandList::SetStencilRef(UINT const stencil_ref) const -> void {
-  cmd_list_->OMSetStencilRef(stencil_ref);
-}
-
-
-auto CommandList::SetScissorRects(std::span<D3D12_RECT const> const rects) const -> void {
-  cmd_list_->RSSetScissorRects(static_cast<UINT>(rects.size()), rects.data());
-}
-
-
-auto CommandList::SetViewports(std::span<D3D12_VIEWPORT const> const viewports) const -> void {
-  cmd_list_->RSSetViewports(static_cast<UINT>(viewports.size()), viewports.data());
-}
-
-
-auto CommandList::SetPipelineParameter(UINT const index, UINT const value) const -> void {
-  if (compute_pipeline_set_) {
-    cmd_list_->SetComputeRoot32BitConstant(0, value, index);
-  } else {
-    cmd_list_->SetGraphicsRoot32BitConstant(0, value, index);
-  }
-}
-
-
-auto CommandList::SetPipelineParameters(UINT const index, std::span<UINT const> const values) const -> void {
-  if (compute_pipeline_set_) {
-    cmd_list_->SetComputeRoot32BitConstants(0, static_cast<UINT>(values.size()), values.data(), index);
-  } else {
-    cmd_list_->SetGraphicsRoot32BitConstants(0, static_cast<UINT>(values.size()), values.data(), index);
-  }
-}
-
-
-auto CommandList::SetConstantBuffer(UINT const param_idx, Buffer const& buf) -> void {
-  GenerateBarrier(buf, D3D12_BARRIER_SYNC_ALL_SHADING, D3D12_BARRIER_ACCESS_CONSTANT_BUFFER);
-  SetPipelineParameter(param_idx, buf.GetConstantBuffer());
-}
-
-
-auto CommandList::SetShaderResource(UINT const param_idx, Buffer const& buf) -> void {
-  GenerateBarrier(buf, D3D12_BARRIER_SYNC_ALL_SHADING, D3D12_BARRIER_ACCESS_SHADER_RESOURCE);
-  SetPipelineParameter(param_idx, buf.GetShaderResource());
-}
-
-
-auto CommandList::SetShaderResource(UINT const param_idx, Texture const& tex) -> void {
-  GenerateBarrier(tex, D3D12_BARRIER_SYNC_ALL_SHADING, D3D12_BARRIER_ACCESS_SHADER_RESOURCE,
-                  D3D12_BARRIER_LAYOUT_DIRECT_QUEUE_SHADER_RESOURCE);
-  SetPipelineParameter(param_idx, tex.GetShaderResource());
-}
-
-
-auto CommandList::SetUnorderedAccess(UINT const param_idx, Buffer const& buf) -> void {
-  GenerateBarrier(buf, D3D12_BARRIER_SYNC_ALL_SHADING, D3D12_BARRIER_ACCESS_UNORDERED_ACCESS);
-  SetPipelineParameter(param_idx, buf.GetUnorderedAccess());
-}
-
-
-auto CommandList::SetUnorderedAccess(UINT const param_idx, Texture const& tex) -> void {
-  GenerateBarrier(tex, D3D12_BARRIER_SYNC_ALL_SHADING, D3D12_BARRIER_ACCESS_UNORDERED_ACCESS,
-                  D3D12_BARRIER_LAYOUT_DIRECT_QUEUE_UNORDERED_ACCESS);
-  SetPipelineParameter(param_idx, tex.GetUnorderedAccess());
-}
-
-
-auto CommandList::SetPipelineState(PipelineState const& pipeline_state) -> void {
-  cmd_list_->SetPipelineState(pipeline_state.pipeline_state_.Get());
-  compute_pipeline_set_ = pipeline_state.is_compute_;
-  pipeline_allows_ds_write_ = pipeline_state.allows_ds_write_;
-  SetRootSignature(pipeline_state.num_params_);
-}
-
-
-auto CommandList::SetRootSignature(std::uint8_t const num_params) const -> void {
-  if (compute_pipeline_set_) {
-    cmd_list_->SetComputeRootSignature(root_signatures_->Get(num_params).Get());
-  } else {
-    cmd_list_->SetGraphicsRootSignature(root_signatures_->Get(num_params).Get());
-  }
-}
-
-
-CommandList::CommandList(ComPtr<ID3D12CommandAllocator> allocator, ComPtr<ID3D12GraphicsCommandList7> cmd_list,
-                         details::DescriptorHeap const* dsv_heap, details::DescriptorHeap const* rtv_heap,
-                         details::DescriptorHeap const* res_desc_heap, details::DescriptorHeap const* sampler_heap,
-                         details::RootSignatureCache* root_signatures) :
-  allocator_{std::move(allocator)},
-  cmd_list_{std::move(cmd_list)},
-  dsv_heap_{dsv_heap},
-  rtv_heap_{rtv_heap},
-  res_desc_heap_{res_desc_heap},
-  sampler_heap_{sampler_heap},
-  root_signatures_{root_signatures} {
-}
-
-
-auto CommandList::GenerateBarrier(Buffer const& buf, D3D12_BARRIER_SYNC const sync,
-                                  D3D12_BARRIER_ACCESS const access) -> void {
-  auto const local_state{local_resource_states_.Get(buf.GetInternalResource())};
-  auto const needs_barrier{local_state && (local_state->access & access) == 0};
-
-  if (!local_state || needs_barrier) {
-    local_resource_states_.Record(buf.GetInternalResource(), {
-                                    .sync = sync, .access = access, .layout = D3D12_BARRIER_LAYOUT_UNDEFINED
-                                  });
-  }
-
-  if (needs_barrier) {
-    D3D12_BUFFER_BARRIER const barrier{
-      local_state->sync, sync, local_state->access, access, buf.GetInternalResource(), 0, UINT64_MAX
-    };
-    D3D12_BARRIER_GROUP const group{.Type = D3D12_BARRIER_TYPE_BUFFER, .NumBarriers = 1, .pBufferBarriers = &barrier};
-    cmd_list_->Barrier(1, &group);
-  }
-}
-
-
-auto CommandList::GenerateBarrier(Texture const& tex, D3D12_BARRIER_SYNC const sync, D3D12_BARRIER_ACCESS const access,
-                                  D3D12_BARRIER_LAYOUT const layout) -> void {
-  auto const local_state{local_resource_states_.Get(tex.GetInternalResource())};
-  auto const needs_barrier{local_state && ((local_state->layout & layout) == 0 || (local_state->access & access) == 0)};
-
-  if (!local_state) {
-    pending_barriers_.emplace_back(layout, tex.GetInternalResource());
-  }
-
-  if (!local_state || needs_barrier) {
-    local_resource_states_.Record(tex.GetInternalResource(), {.sync = sync, .access = access, .layout = layout});
-  }
-
-  if (needs_barrier) {
-    D3D12_TEXTURE_BARRIER const barrier{
-      local_state->sync, sync, local_state->access, access, local_state->layout, layout, tex.GetInternalResource(), {
-        .IndexOrFirstMipLevel = 0xffffffff, .NumMipLevels = 0, .FirstArraySlice = 0, .NumArraySlices = 0,
-        .FirstPlane = 0, .NumPlanes = 0
-      },
-      D3D12_TEXTURE_BARRIER_FLAG_NONE
-    };
-    D3D12_BARRIER_GROUP const group{.Type = D3D12_BARRIER_TYPE_TEXTURE, .NumBarriers = 1, .pTextureBarriers = &barrier};
-    cmd_list_->Barrier(1, &group);
-  }
-}
-
-
-auto Fence::GetNextValue() const -> UINT64 {
-  return next_val_;
-}
-
-
-auto Fence::GetCompletedValue() const -> UINT64 {
-  return fence_->GetCompletedValue();
-}
-
-
-auto Fence::Wait(UINT64 const wait_value) const -> void {
-  ThrowIfFailed(fence_->SetEventOnCompletion(wait_value, nullptr), "Failed to wait fence from CPU.");
-}
-
-
-auto Fence::Signal() -> void {
-  auto const new_fence_val{next_val_.load()};
-  ThrowIfFailed(fence_->Signal(new_fence_val), "Failed to signal fence from the CPU.");
-  next_val_ = new_fence_val + 1;
-}
-
-
-Fence::Fence(ComPtr<ID3D12Fence> fence, UINT64 const next_value) :
-  fence_{std::move(fence)},
-  next_val_{next_value} {
-}
-
-
-auto SwapChain::GetTextures() const -> std::span<SharedDeviceChildHandle<Texture const> const> {
-  return *std::bit_cast<std::span<SharedDeviceChildHandle<Texture const>>*>(&textures_);
-}
-
-
-auto SwapChain::GetCurrentTextureIndex() const -> UINT {
-  return swap_chain_->GetCurrentBackBufferIndex();
-}
-
-
-auto SwapChain::GetCurrentTexture() const -> Texture const& {
-  return *textures_[GetCurrentTextureIndex()];
-}
-
-
-auto SwapChain::GetSyncInterval() const -> UINT {
-  return sync_interval_;
-}
-
-
-auto SwapChain::SetSyncInterval(UINT const sync_interval) -> void {
-  sync_interval_ = sync_interval;
-}
-
-
-SwapChain::SwapChain(ComPtr<IDXGISwapChain4> swap_chain, UINT const present_flags) :
-  swap_chain_{std::move(swap_chain)},
-  present_flags_{present_flags} {
-}
-
-
-UniqueSamplerHandle::UniqueSamplerHandle(UINT const resource, GraphicsDevice& device) :
-  resource_{resource},
-  device_{&device} {
-}
-
-
-UniqueSamplerHandle::UniqueSamplerHandle(UniqueSamplerHandle&& other) noexcept :
-  resource_{other.resource_},
-  device_{other.device_} {
-  other.resource_ = details::kInvalidResourceIndex;
-  other.device_ = nullptr;
-}
-
-
-UniqueSamplerHandle::~UniqueSamplerHandle() {
-  InternalDestruct();
-}
-
-
-auto UniqueSamplerHandle::operator=(UniqueSamplerHandle&& other) noexcept -> UniqueSamplerHandle& {
-  if (this != &other) {
-    InternalDestruct();
-    resource_ = other.resource_;
-    device_ = other.device_;
-    other.resource_ = details::kInvalidResourceIndex;
-    other.device_ = nullptr;
-  }
-  return *this;
-}
-
-
-auto UniqueSamplerHandle::Get() const -> UINT {
-  return resource_;
-}
-
-
-auto UniqueSamplerHandle::IsValid() const -> bool {
-  return resource_ != details::kInvalidResourceIndex;
-}
-
-
-auto UniqueSamplerHandle::InternalDestruct() const -> void {
-  if (device_) {
-    device_->DestroySampler(resource_);
-  }
 }
 }

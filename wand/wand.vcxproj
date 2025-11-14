@@ -62,7 +62,8 @@
       <PreprocessorDefinitions>_DEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp23</LanguageStandard>
-      <AdditionalIncludeDirectories>$(ProjectDir)include\wand;$(SolutionDir)deps\D3D12MemoryAllocator\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)include;$(SolutionDir)deps\D3D12MemoryAllocator\include</AdditionalIncludeDirectories>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
     <Link>
       <SubSystem>
@@ -79,7 +80,8 @@
       <PreprocessorDefinitions>NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp23</LanguageStandard>
-      <AdditionalIncludeDirectories>$(ProjectDir)include\wand;$(SolutionDir)deps\D3D12MemoryAllocator\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)include;$(SolutionDir)deps\D3D12MemoryAllocator\include</AdditionalIncludeDirectories>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
     <Link>
       <SubSystem>
@@ -92,13 +94,43 @@
       <WarningLevel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">TurnOffAllWarnings</WarningLevel>
       <WarningLevel Condition="'$(Configuration)|$(Platform)'=='Release|x64'">TurnOffAllWarnings</WarningLevel>
     </ClCompile>
+    <ClCompile Include="src\buffer.cpp" />
+    <ClCompile Include="src\command_list.cpp" />
+    <ClCompile Include="src\common.cpp" />
+    <ClCompile Include="src\descriptor_heap.cpp" />
+    <ClCompile Include="src\device_child.cpp" />
+    <ClCompile Include="src\fence.cpp" />
+    <ClCompile Include="src\format.cpp" />
+    <ClCompile Include="src\pipeline.cpp" />
+    <ClCompile Include="src\resource.cpp" />
+    <ClCompile Include="src\root_signature_cache.cpp" />
+    <ClCompile Include="src\sampler.cpp" />
+    <ClCompile Include="src\swapchain.cpp" />
+    <ClCompile Include="src\texture.cpp" />
     <ClCompile Include="src\wand.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="include\wand\barrier.hpp" />
+    <ClInclude Include="include\wand\buffer.hpp" />
+    <ClInclude Include="include\wand\command_list.hpp" />
+    <ClInclude Include="include\wand\common.hpp" />
+    <ClInclude Include="include\wand\descriptor_heap.hpp" />
+    <ClInclude Include="include\wand\device_child.hpp" />
+    <ClInclude Include="include\wand\fence.hpp" />
+    <ClInclude Include="include\wand\format.hpp" />
+    <ClInclude Include="include\wand\pipeline.hpp" />
+    <ClInclude Include="include\wand\resource.hpp" />
+    <ClInclude Include="include\wand\resource_state_tracker.hpp" />
+    <ClInclude Include="include\wand\root_signature_cache.hpp" />
+    <ClInclude Include="include\wand\sampler.hpp" />
+    <ClInclude Include="include\wand\swapchain.hpp" />
+    <ClInclude Include="include\wand\texture.hpp" />
     <ClInclude Include="include\wand\util.hpp" />
     <ClInclude Include="include\wand\wand.hpp" />
+    <ClInclude Include="include\wand\platforms\d3d12.hpp" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="include\wand\resource_state_tracker.inl" />
     <None Include="include\wand\util.inl" />
     <None Include="packages.config" />
   </ItemGroup>

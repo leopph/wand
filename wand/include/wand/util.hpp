@@ -7,4 +7,4 @@ template<std::integral To, std::integral From>
 [[nodiscard]] constexpr auto ClampCast(From what) -> To;
 }
 
-#include "util.inl"
+#include <wand/util.inl>

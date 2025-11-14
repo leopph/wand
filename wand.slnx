@@ -2,5 +2,5 @@
   <Configurations>
     <Platform Name="x64" />
   </Configurations>
-  <Project Path="wand/wand.vcxproj" />
+  <Project Path="wand/wand.vcxproj" Id="f91f1551-40d1-4c76-af68-ade75caf8cb7" />
 </Solution>
