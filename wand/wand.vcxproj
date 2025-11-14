@@ -48,12 +48,12 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <OutDir>$(SolutionDir)bin\$(ProjectName)\$(Configuration)\</OutDir>
     <IntDir>$(SolutionDir)int\$(ProjectName)\$(Configuration)\</IntDir>
-    <PublicIncludeDirectories>$(ProjectDir)include;$(SolutionDir)deps\D3D12MemoryAllocator\include</PublicIncludeDirectories>
+    <PublicIncludeDirectories>$(ProjectDir)include;$(ProjectDir)..\deps\D3D12MemoryAllocator\include</PublicIncludeDirectories>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <OutDir>$(SolutionDir)bin\$(ProjectName)\$(Configuration)\</OutDir>
     <IntDir>$(SolutionDir)int\$(ProjectName)\$(Configuration)\</IntDir>
-    <PublicIncludeDirectories>$(ProjectDir)include;$(SolutionDir)deps\D3D12MemoryAllocator\include</PublicIncludeDirectories>
+    <PublicIncludeDirectories>$(ProjectDir)include;$(ProjectDir)..\deps\D3D12MemoryAllocator\include</PublicIncludeDirectories>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
