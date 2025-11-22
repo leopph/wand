@@ -104,6 +104,7 @@
     <ClCompile Include="src\pipeline.cpp" />
     <ClCompile Include="src\resource.cpp" />
     <ClCompile Include="src\root_signature_cache.cpp" />
+    <ClCompile Include="src\rt_state_object.cpp" />
     <ClCompile Include="src\sampler.cpp" />
     <ClCompile Include="src\swapchain.cpp" />
     <ClCompile Include="src\texture.cpp" />
@@ -123,6 +124,7 @@
     <ClInclude Include="include\wand\resource_state_tracker.hpp" />
     <ClInclude Include="include\wand\root_signature_cache.hpp" />
     <ClInclude Include="include\wand\sampler.hpp" />
+    <ClInclude Include="include\wand\rt_state_object.hpp" />
     <ClInclude Include="include\wand\swapchain.hpp" />
     <ClInclude Include="include\wand\texture.hpp" />
     <ClInclude Include="include\wand\util.hpp" />

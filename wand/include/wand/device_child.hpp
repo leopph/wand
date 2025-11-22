@@ -9,16 +9,19 @@ namespace wand {
 class Buffer;
 class Texture;
 class PipelineState;
+class RtStateObject;
 class CommandList;
 class Fence;
 class SwapChain;
 
-template<typename T>concept DeviceChild = std::same_as<std::remove_const_t<T>, Buffer> || std::same_as<
-  std::remove_const_t<T>, Texture> || std::same_as<
-  std::remove_const_t<T>, PipelineState> || std::same_as<
-  std::remove_const_t<T>, CommandList> || std::same_as<
-  std::remove_const_t<T>, Fence> || std::same_as<
-  std::remove_const_t<T>, SwapChain>;
+template<typename T>concept DeviceChild =
+  std::same_as<std::remove_const_t<T>, Buffer> ||
+  std::same_as<std::remove_const_t<T>, Texture> ||
+  std::same_as<std::remove_const_t<T>, PipelineState> ||
+  std::same_as<std::remove_const_t<T>, RtStateObject> ||
+  std::same_as<std::remove_const_t<T>, CommandList> ||
+  std::same_as<std::remove_const_t<T>, Fence> ||
+  std::same_as<std::remove_const_t<T>, SwapChain>;
 
 template<DeviceChild T>
 class DeviceChildDeleter;
@@ -31,6 +34,7 @@ using SharedDeviceChildHandle = std::shared_ptr<T>;
 
 class GraphicsDevice;
 
+
 template<DeviceChild T>
 class DeviceChildDeleter {
 public:
@@ -41,6 +45,7 @@ public:
 private:
   GraphicsDevice* device_;
 };
+
 
 extern template class DeviceChildDeleter<Buffer>;
 extern template class DeviceChildDeleter<Texture>;

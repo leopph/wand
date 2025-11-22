@@ -277,34 +277,7 @@ auto GraphicsDevice::CreateTexture(TextureDesc const& desc,
 auto GraphicsDevice::CreatePipelineState(PipelineDesc const& desc,
                                          std::uint8_t const num_32_bit_params) -> SharedDeviceChildHandle<
   PipelineState> {
-  auto root_signature{root_signatures_.Get(num_32_bit_params)};
-
-  if (!root_signature) {
-    std::array<CD3DX12_ROOT_PARAMETER1, 2> root_params;
-    root_params[0].InitAsConstants(num_32_bit_params, 0, 0, D3D12_SHADER_VISIBILITY_ALL);
-    // 2 params: base vertex and base instance. Make sure this aligns with the shader code!
-    root_params[1].InitAsConstants(2, 1, 0, D3D12_SHADER_VISIBILITY_VERTEX);
-
-    D3D12_VERSIONED_ROOT_SIGNATURE_DESC const root_signature_desc{
-      .Version = D3D_ROOT_SIGNATURE_VERSION_1_1,
-      .Desc_1_1 = {
-        static_cast<UINT>(root_params.size()), root_params.data(), 0, nullptr,
-        D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED |
-        D3D12_ROOT_SIGNATURE_FLAG_SAMPLER_HEAP_DIRECTLY_INDEXED
-      }
-    };
-
-    ComPtr<ID3DBlob> root_signature_blob;
-    ComPtr<ID3DBlob> error_blob;
-
-    ThrowIfFailed(D3D12SerializeVersionedRootSignature(&root_signature_desc, &root_signature_blob, &error_blob),
-                  "Failed to serialize root signature.");
-    ThrowIfFailed(device_->CreateRootSignature(0, root_signature_blob->GetBufferPointer(),
-                                               root_signature_blob->GetBufferSize(), IID_PPV_ARGS(&root_signature)),
-                  "Failed to create root signature.");
-
-    root_signature = root_signatures_.Add(num_32_bit_params, std::move(root_signature));
-  }
+  auto root_signature = GetOrCreateRootSignature(num_32_bit_params);
 
   ComPtr<ID3D12PipelineState> pipeline_state;
 
@@ -341,6 +314,24 @@ auto GraphicsDevice::CreatePipelineState(PipelineDesc const& desc,
       desc.depth_stencil_state.DepthEnable && desc.depth_stencil_state.DepthWriteMask != D3D12_DEPTH_WRITE_MASK_ZERO
     },
     DeviceChildDeleter<PipelineState>{*this}
+  };
+}
+
+
+auto GraphicsDevice::CreateRtStateObject(RtStateObjectDesc& desc,
+                                         std::uint8_t const num_32_bit_params) -> SharedDeviceChildHandle<
+  RtStateObject> {
+  auto root_signature = GetOrCreateRootSignature(num_32_bit_params);
+  auto* const global_root_sig_desc = desc.desc_.CreateSubobject<CD3DX12_GLOBAL_ROOT_SIGNATURE_SUBOBJECT>();
+  global_root_sig_desc->SetRootSignature(root_signature.Get());
+
+  ComPtr<ID3D12StateObject> state_object;
+  ThrowIfFailed(device_->CreateStateObject(desc.desc_, IID_PPV_ARGS(&state_object)),
+                "Failed to create RT state object.");
+
+  return SharedDeviceChildHandle<RtStateObject>{
+    new RtStateObject{std::move(root_signature), std::move(state_object), num_32_bit_params},
+    DeviceChildDeleter<RtStateObject>{*this}
   };
 }
 
@@ -1061,5 +1052,40 @@ auto GraphicsDevice::MakeHeapType(CpuAccess const cpu_access) const -> D3D12_HEA
   }
 
   throw std::runtime_error{"Failed to make D3D12 heap type: unknown CPU access type."};
+}
+
+
+auto GraphicsDevice::GetOrCreateRootSignature(
+  std::uint8_t const num_32_bit_params) -> ComPtr<ID3D12RootSignature> {
+  auto root_signature{root_signatures_.Get(num_32_bit_params)};
+
+  if (!root_signature) {
+    std::array<CD3DX12_ROOT_PARAMETER1, 2> root_params;
+    root_params[0].InitAsConstants(num_32_bit_params, 0, 0, D3D12_SHADER_VISIBILITY_ALL);
+    // 2 params: base vertex and base instance. Make sure this aligns with the shader code!
+    root_params[1].InitAsConstants(2, 1, 0, D3D12_SHADER_VISIBILITY_VERTEX);
+
+    D3D12_VERSIONED_ROOT_SIGNATURE_DESC const root_signature_desc{
+      .Version = D3D_ROOT_SIGNATURE_VERSION_1_1,
+      .Desc_1_1 = {
+        static_cast<UINT>(root_params.size()), root_params.data(), 0, nullptr,
+        D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED |
+        D3D12_ROOT_SIGNATURE_FLAG_SAMPLER_HEAP_DIRECTLY_INDEXED
+      }
+    };
+
+    ComPtr<ID3DBlob> root_signature_blob;
+    ComPtr<ID3DBlob> error_blob;
+
+    ThrowIfFailed(D3D12SerializeVersionedRootSignature(&root_signature_desc, &root_signature_blob, &error_blob),
+                  "Failed to serialize root signature.");
+    ThrowIfFailed(device_->CreateRootSignature(0, root_signature_blob->GetBufferPointer(),
+                                               root_signature_blob->GetBufferSize(), IID_PPV_ARGS(&root_signature)),
+                  "Failed to create root signature.");
+
+    root_signature = root_signatures_.Add(num_32_bit_params, std::move(root_signature));
+  }
+
+  return root_signature;
 }
 }

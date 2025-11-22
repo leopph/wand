@@ -17,6 +17,7 @@
 #include <wand/pipeline.hpp>
 #include <wand/resource_state_tracker.hpp>
 #include <wand/root_signature_cache.hpp>
+#include <wand/rt_state_object.hpp>
 #include <wand/sampler.hpp>
 #include <wand/swapchain.hpp>
 #include <wand/texture.hpp>
@@ -57,22 +58,20 @@ public:
   auto operator=(GraphicsDevice const&) -> void = delete;
   auto operator=(GraphicsDevice&&) -> void = delete;
 
-  [[nodiscard]] auto CreateBuffer(BufferDesc const& desc,
-                                  CpuAccess cpu_access) -> SharedDeviceChildHandle<Buffer>;
-  [[nodiscard]] auto CreateTexture(TextureDesc const& desc,
-                                   CpuAccess cpu_access,
+  [[nodiscard]] auto CreateBuffer(BufferDesc const& desc, CpuAccess cpu_access) -> SharedDeviceChildHandle<Buffer>;
+  [[nodiscard]] auto CreateTexture(TextureDesc const& desc, CpuAccess cpu_access,
                                    D3D12_CLEAR_VALUE const* clear_value) -> SharedDeviceChildHandle<Texture>;
   [[nodiscard]] auto CreatePipelineState(PipelineDesc const& desc,
-                                         std::uint8_t num_32_bit_params) -> SharedDeviceChildHandle<
-    PipelineState>;
+                                         std::uint8_t num_32_bit_params) -> SharedDeviceChildHandle<PipelineState>;
+  [[nodiscard]] auto CreateRtStateObject(RtStateObjectDesc& desc,
+                                         std::uint8_t num_32_bit_params) -> SharedDeviceChildHandle<RtStateObject>;
   [[nodiscard]] auto CreateCommandList() -> SharedDeviceChildHandle<CommandList>;
   [[nodiscard]] auto CreateFence(UINT64 initial_value) -> SharedDeviceChildHandle<Fence>;
   [[nodiscard]] auto CreateSwapChain(SwapChainDesc const& desc,
                                      HWND window_handle) -> SharedDeviceChildHandle<SwapChain>;
   [[nodiscard]] auto CreateSampler(D3D12_SAMPLER_DESC const& desc) -> UniqueSamplerHandle;
   auto CreateAliasingResources(std::span<BufferDesc const> buffer_descs,
-                               std::span<AliasedTextureCreateInfo const> texture_infos,
-                               CpuAccess cpu_access,
+                               std::span<AliasedTextureCreateInfo const> texture_infos, CpuAccess cpu_access,
                                std::vector<SharedDeviceChildHandle<Buffer>>* buffers,
                                std::vector<SharedDeviceChildHandle<Texture>>* textures) -> void;
 
@@ -108,6 +107,9 @@ private:
   [[nodiscard]] auto AcquirePendingBarrierCmdList() -> CommandList&;
 
   [[nodiscard]] auto MakeHeapType(CpuAccess cpu_access) const -> D3D12_HEAP_TYPE;
+
+  [[nodiscard]] auto GetOrCreateRootSignature(
+    std::uint8_t num_32_bit_params) -> Microsoft::WRL::ComPtr<ID3D12RootSignature>;
 
   static UINT const rtv_heap_size_;
   static UINT const dsv_heap_size_;
