@@ -95,6 +95,10 @@ public:
                              UINT64 base_offset, D3D12_PLACED_SUBRESOURCE_FOOTPRINT* layouts,
                              UINT* row_counts, UINT64* row_sizes, UINT64* total_size) const -> void;
 
+  [[nodiscard]] auto GetRtAccelerationStructurePrebuildInfo(
+    D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS const& inputs) const ->
+    D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO;
+
 private:
   auto SwapChainCreateTextures(SwapChain& swap_chain) -> void;
 

@@ -714,6 +714,15 @@ auto GraphicsDevice::GetCopyableFootprints(TextureDesc const& desc, UINT const f
 }
 
 
+auto GraphicsDevice::GetRtAccelerationStructurePrebuildInfo(
+  D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS const& inputs) const ->
+  D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO {
+  D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO info;
+  device_->GetRaytracingAccelerationStructurePrebuildInfo(&inputs, &info);
+  return info;
+}
+
+
 auto GraphicsDevice::SwapChainCreateTextures(SwapChain& swap_chain) -> void {
   DXGI_SWAP_CHAIN_DESC1 desc;
   ThrowIfFailed(swap_chain.swap_chain_->GetDesc1(&desc), "Failed to retrieve swap chain desc.");
