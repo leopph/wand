@@ -7,6 +7,7 @@
 #include <wand/pipeline.hpp>
 #include <wand/resource_state_tracker.hpp>
 #include <wand/root_signature_cache.hpp>
+#include <wand/rt_state_object.hpp>
 #include <wand/texture.hpp>
 
 namespace wand {
@@ -61,6 +62,7 @@ public:
   auto SetUnorderedAccess(UINT param_idx, Buffer const& buf) -> void;
   auto SetUnorderedAccess(UINT param_idx, Texture const& tex) -> void;
   auto SetPipelineState(PipelineState const& pipeline_state) -> void;
+  auto SetRtState(RtStateObject const& rt_state) -> void;
 
 private:
   auto SetRootSignature(std::uint8_t num_params) const -> void;

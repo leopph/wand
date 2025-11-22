@@ -295,6 +295,14 @@ auto CommandList::SetPipelineState(PipelineState const& pipeline_state) -> void 
 }
 
 
+auto CommandList::SetRtState(RtStateObject const& rt_state) -> void {
+  cmd_list_->SetPipelineState1(rt_state.state_object_.Get());
+  compute_pipeline_set_ = true;
+  pipeline_allows_ds_write_ = false;
+  SetRootSignature(rt_state.num_params_);
+}
+
+
 auto CommandList::SetRootSignature(std::uint8_t const num_params) const -> void {
   if (compute_pipeline_set_) {
     cmd_list_->SetComputeRootSignature(root_signatures_->Get(num_params).Get());
