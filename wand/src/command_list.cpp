@@ -303,6 +303,28 @@ auto CommandList::SetRtState(RtStateObject const& rt_state) -> void {
 }
 
 
+auto CommandList::BuildRaytracingAccelerationStructure(
+  std::span<BuildRaytracingAccelerationStructureDesc const> descs) const -> void {
+  std::vector<D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC> d3d_descs;
+  std::ranges::transform(
+    descs, std::back_inserter(d3d_descs),
+    [](BuildRaytracingAccelerationStructureDesc const& desc) {
+      return D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC{
+        .DestAccelerationStructureData = desc.dst_as->GetInternalResource()->GetGPUVirtualAddress(),
+        .Inputs = desc.inputs,
+        .SourceAccelerationStructureData = desc.src_as
+                                             ? desc.src_as->GetInternalResource()->GetGPUVirtualAddress()
+                                             : 0,
+        .ScratchAccelerationStructureData = desc.scratch_buffer
+                                              ? desc.scratch_buffer->GetInternalResource()->GetGPUVirtualAddress()
+                                              : 0
+      };
+    });
+
+  cmd_list_->BuildRaytracingAccelerationStructure(d3d_descs.data(), 0, nullptr);
+}
+
+
 auto CommandList::SetRootSignature(std::uint8_t const num_params) const -> void {
   if (compute_pipeline_set_) {
     cmd_list_->SetComputeRootSignature(root_signatures_->Get(num_params).Get());

@@ -19,6 +19,14 @@ struct PendingBarrier {
 }
 
 
+struct BuildRaytracingAccelerationStructureDesc {
+  Buffer const* dst_as;
+  D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs;
+  Buffer const* src_as; // Optional, for updates
+  Buffer const* scratch_buffer;
+};
+
+
 class CommandList {
 public:
   auto Begin(PipelineState const* pipeline_state) -> void;
@@ -63,6 +71,9 @@ public:
   auto SetUnorderedAccess(UINT param_idx, Texture const& tex) -> void;
   auto SetPipelineState(PipelineState const& pipeline_state) -> void;
   auto SetRtState(RtStateObject const& rt_state) -> void;
+
+  auto BuildRaytracingAccelerationStructure(
+    std::span<BuildRaytracingAccelerationStructureDesc const> descs) const -> void;
 
 private:
   auto SetRootSignature(std::uint8_t num_params) const -> void;
