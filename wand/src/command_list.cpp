@@ -356,40 +356,91 @@ CommandList::CommandList(ComPtr<ID3D12CommandAllocator> allocator, ComPtr<ID3D12
 auto CommandList::GenerateBarrier(Buffer const& buf, D3D12_BARRIER_SYNC const sync,
                                   D3D12_BARRIER_ACCESS const access) -> void {
   auto const local_state{local_resource_states_.Get(buf.GetInternalResource())};
-  auto const needs_barrier{local_state && (local_state->access & access) == 0};
 
-  if (!local_state || needs_barrier) {
-    local_resource_states_.Record(buf.GetInternalResource(), {
-                                    .sync = sync, .access = access, .layout = D3D12_BARRIER_LAYOUT_UNDEFINED
-                                  });
-  }
-
-  if (needs_barrier) {
+  // We don't deal with buffers globally, only locally within command lists.
+  // This means that we have to assume the worst about the state of a buffer
+  // that we encounter for the first time in a command list and we have to
+  // place a barrier to transition it from this unknown state.
+  if (!local_state) {
     D3D12_BUFFER_BARRIER const barrier{
-      local_state->sync, sync, local_state->access, access, buf.GetInternalResource(), 0, UINT64_MAX
+      .SyncBefore = D3D12_BARRIER_SYNC_NONE,
+      .SyncAfter = sync,
+      .AccessBefore = D3D12_BARRIER_ACCESS_NO_ACCESS,
+      .AccessAfter = access,
+      .pResource = buf.GetInternalResource(),
+      .Offset = 0,
+      .Size = UINT64_MAX
     };
     D3D12_BARRIER_GROUP const group{.Type = D3D12_BARRIER_TYPE_BUFFER, .NumBarriers = 1, .pBufferBarriers = &barrier};
     cmd_list_->Barrier(1, &group);
+
+    local_resource_states_.Record(buf.GetInternalResource(), {
+                                    .accum_sync = sync, .accum_access = access, .layout = D3D12_BARRIER_LAYOUT_UNDEFINED
+                                  });
+    return;
   }
+
+  // If the buffer has already been used on this command list, we can decide whether we need a barrier.
+
+  auto const needs_barrier{
+    (local_state->accum_access & access) != access || // The previous accesses dont cover the required access
+    (local_state->accum_sync & sync) != sync || // The previous syncs dont cover the required sync
+    ((local_state->accum_access & D3D12_BARRIER_ACCESS_UNORDERED_ACCESS) == D3D12_BARRIER_ACCESS_UNORDERED_ACCESS
+      // The required access and the previous accesses both include UAV. Conservative but safe.
+      && access == D3D12_BARRIER_ACCESS_UNORDERED_ACCESS)
+  };
+
+  // If we don't need a barrier, we accumulate the access flags
+  if (!needs_barrier) {
+    local_resource_states_.Record(buf.GetInternalResource(), {
+                                    .accum_sync = local_state->accum_sync | sync,
+                                    .accum_access = local_state->accum_access | access,
+                                    .layout = D3D12_BARRIER_LAYOUT_UNDEFINED
+                                  });
+    return;
+  }
+
+  // If we need a barrier, we place it and store the new access and sync flags
+
+    D3D12_BUFFER_BARRIER const barrier{
+    .SyncBefore = local_state->accum_sync,
+    .SyncAfter = sync,
+    .AccessBefore = local_state->accum_access,
+    .AccessAfter = access,
+    .pResource = buf.GetInternalResource(),
+    .Offset = 0,
+    .Size = UINT64_MAX
+    };
+    D3D12_BARRIER_GROUP const group{.Type = D3D12_BARRIER_TYPE_BUFFER, .NumBarriers = 1, .pBufferBarriers = &barrier};
+    cmd_list_->Barrier(1, &group);
+
+  local_resource_states_.Record(buf.GetInternalResource(), {
+                                  .accum_sync = sync, .accum_access = access, .layout = D3D12_BARRIER_LAYOUT_UNDEFINED
+                                });
 }
 
 
 auto CommandList::GenerateBarrier(Texture const& tex, D3D12_BARRIER_SYNC const sync, D3D12_BARRIER_ACCESS const access,
                                   D3D12_BARRIER_LAYOUT const layout) -> void {
   auto const local_state{local_resource_states_.Get(tex.GetInternalResource())};
-  auto const needs_barrier{local_state && ((local_state->layout & layout) == 0 || (local_state->access & access) == 0)};
+  auto const needs_barrier{
+    local_state && ((local_state->layout & layout) == 0 || (local_state->accum_access & access) == 0)
+  };
 
   if (!local_state) {
     pending_barriers_.emplace_back(layout, tex.GetInternalResource());
   }
 
   if (!local_state || needs_barrier) {
-    local_resource_states_.Record(tex.GetInternalResource(), {.sync = sync, .access = access, .layout = layout});
+    local_resource_states_.Record(tex.GetInternalResource(), {
+                                    .accum_sync = sync, .accum_access = access, .layout = layout
+                                  });
   }
 
   if (needs_barrier) {
     D3D12_TEXTURE_BARRIER const barrier{
-      local_state->sync, sync, local_state->access, access, local_state->layout, layout, tex.GetInternalResource(), {
+      local_state->accum_sync, sync, local_state->accum_access, access, local_state->layout, layout,
+      tex.GetInternalResource(), {
         .IndexOrFirstMipLevel = 0xffffffff, .NumMipLevels = 0, .FirstArraySlice = 0, .NumArraySlices = 0,
         .FirstPlane = 0, .NumPlanes = 0
       },
