@@ -74,7 +74,7 @@ public:
   auto SetRtState(RtStateObject const& rt_state) -> void;
 
   auto BuildRaytracingAccelerationStructure(
-    std::span<BuildRaytracingAccelerationStructureDesc const> descs) const -> void;
+    std::span<BuildRaytracingAccelerationStructureDesc const> descs) -> void;
 
 private:
   auto SetRootSignature(std::uint8_t num_params) const -> void;

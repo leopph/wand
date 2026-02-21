@@ -309,7 +309,7 @@ auto CommandList::SetRtState(RtStateObject const& rt_state) -> void {
 
 
 auto CommandList::BuildRaytracingAccelerationStructure(
-  std::span<BuildRaytracingAccelerationStructureDesc const> descs) const -> void {
+  std::span<BuildRaytracingAccelerationStructureDesc const> descs) -> void {
   std::vector<D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC> d3d_descs;
   std::ranges::transform(
     descs, std::back_inserter(d3d_descs),
@@ -325,6 +325,19 @@ auto CommandList::BuildRaytracingAccelerationStructure(
                                               : 0
       };
     });
+
+  std::ranges::for_each(descs, [this](BuildRaytracingAccelerationStructureDesc const& desc) {
+    GenerateBarrier(*desc.dst_as, D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
+                    D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_WRITE);
+    if (desc.src_as) {
+      GenerateBarrier(*desc.src_as, D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
+                      D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_READ);
+    }
+    if (desc.scratch_buffer) {
+      GenerateBarrier(*desc.scratch_buffer, D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
+                      D3D12_BARRIER_ACCESS_UNORDERED_ACCESS);
+    }
+  });
 
   cmd_list_->BuildRaytracingAccelerationStructure(d3d_descs.data(), 0, nullptr);
 }
@@ -402,7 +415,7 @@ auto CommandList::GenerateBarrier(Buffer const& buf, D3D12_BARRIER_SYNC const sy
 
   // If we need a barrier, we place it and store the new access and sync flags
 
-    D3D12_BUFFER_BARRIER const barrier{
+  D3D12_BUFFER_BARRIER const barrier{
     .SyncBefore = local_state->accum_sync,
     .SyncAfter = sync,
     .AccessBefore = local_state->accum_access,
@@ -410,9 +423,9 @@ auto CommandList::GenerateBarrier(Buffer const& buf, D3D12_BARRIER_SYNC const sy
     .pResource = buf.GetInternalResource(),
     .Offset = 0,
     .Size = UINT64_MAX
-    };
-    D3D12_BARRIER_GROUP const group{.Type = D3D12_BARRIER_TYPE_BUFFER, .NumBarriers = 1, .pBufferBarriers = &barrier};
-    cmd_list_->Barrier(1, &group);
+  };
+  D3D12_BARRIER_GROUP const group{.Type = D3D12_BARRIER_TYPE_BUFFER, .NumBarriers = 1, .pBufferBarriers = &barrier};
+  cmd_list_->Barrier(1, &group);
 
   local_resource_states_.Record(buf.GetInternalResource(), {
                                   .accum_sync = sync, .accum_access = access, .layout = D3D12_BARRIER_LAYOUT_UNDEFINED
