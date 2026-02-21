@@ -34,4 +34,5 @@ template class DeviceChildDeleter<PipelineState>;
 template class DeviceChildDeleter<CommandList>;
 template class DeviceChildDeleter<Fence>;
 template class DeviceChildDeleter<SwapChain>;
+template class DeviceChildDeleter<RtStateObject>;
 }

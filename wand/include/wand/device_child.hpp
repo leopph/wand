@@ -53,4 +53,5 @@ extern template class DeviceChildDeleter<PipelineState>;
 extern template class DeviceChildDeleter<CommandList>;
 extern template class DeviceChildDeleter<Fence>;
 extern template class DeviceChildDeleter<SwapChain>;
+extern template class DeviceChildDeleter<RtStateObject>;
 }
