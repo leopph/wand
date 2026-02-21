@@ -139,6 +139,11 @@ auto CommandList::DispatchMesh(UINT const thread_group_count_x, UINT const threa
 }
 
 
+auto CommandList::DispatchRays(D3D12_DISPATCH_RAYS_DESC const& desc) const -> void {
+  cmd_list_->DispatchRays(&desc);
+}
+
+
 auto CommandList::DrawIndexedInstanced(UINT const index_count_per_instance, UINT const instance_count,
                                        UINT const start_index_location, INT const base_vertex_location,
                                        UINT const start_instance_location) const -> void {

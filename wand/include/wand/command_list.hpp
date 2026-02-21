@@ -49,6 +49,7 @@ public:
                 UINT thread_group_count_z) const -> void;
   auto DispatchMesh(UINT thread_group_count_x, UINT thread_group_count_y,
                     UINT thread_group_count_z) const -> void;
+  auto DispatchRays(D3D12_DISPATCH_RAYS_DESC const& desc) const -> void;
   auto DrawIndexedInstanced(UINT index_count_per_instance, UINT instance_count, UINT start_index_location,
                             INT base_vertex_location, UINT start_instance_location) const -> void;
   auto DrawInstanced(UINT vertex_count_per_instance, UINT instance_count, UINT start_vertex_location,
