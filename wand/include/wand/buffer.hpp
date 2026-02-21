@@ -9,6 +9,7 @@ struct BufferDesc {
   bool constant_buffer;
   bool shader_resource;
   bool unordered_access;
+  bool acceleration_structure;
 };
 
 class Buffer : public Resource {

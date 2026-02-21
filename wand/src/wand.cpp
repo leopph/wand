@@ -44,6 +44,11 @@ auto AsD3d12Desc(BufferDesc const& desc) -> D3D12_RESOURCE_DESC1 {
     flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
   }
 
+  if (desc.acceleration_structure) {
+    flags |= D3D12_RESOURCE_FLAG_RAYTRACING_ACCELERATION_STRUCTURE;
+    flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+  }
+
   return CD3DX12_RESOURCE_DESC1::Buffer(desc.size, flags);
 }
 
@@ -768,15 +773,29 @@ auto GraphicsDevice::CreateBufferViews(ID3D12Resource2& buffer, BufferDesc const
 
   if (desc.shader_resource) {
     srv = res_desc_heap_->Allocate();
+
+    if (desc.acceleration_structure) {
     D3D12_SHADER_RESOURCE_VIEW_DESC const srv_desc{
+        .Format = DXGI_FORMAT_UNKNOWN,
+        .ViewDimension = D3D12_SRV_DIMENSION_RAYTRACING_ACCELERATION_STRUCTURE,
+        .Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING,
+        .RaytracingAccelerationStructure = {
+          .Location = buffer.GetGPUVirtualAddress()
+        }
+      };
+      device_->CreateShaderResourceView(nullptr, &srv_desc, res_desc_heap_->GetDescriptorCpuHandle(srv));
+    } else {
+      D3D12_SHADER_RESOURCE_VIEW_DESC const srv_desc{
       .Format = desc.stride == 1 ? DXGI_FORMAT_R32_TYPELESS : DXGI_FORMAT_UNKNOWN,
-      .ViewDimension = D3D12_SRV_DIMENSION_BUFFER, .Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING,
+        .ViewDimension = D3D12_SRV_DIMENSION_BUFFER,
+        .Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING,
       .Buffer = {
         0, static_cast<UINT>(desc.size / (desc.stride == 1 ? 4 : desc.stride)), desc.stride == 1 ? 0 : desc.stride,
         desc.stride == 1 ? D3D12_BUFFER_SRV_FLAG_RAW : D3D12_BUFFER_SRV_FLAG_NONE
       }
     };
     device_->CreateShaderResourceView(&buffer, &srv_desc, res_desc_heap_->GetDescriptorCpuHandle(srv));
+    }
   } else {
     srv = kInvalidResourceIndex;
   }
