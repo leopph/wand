@@ -329,8 +329,11 @@ auto GraphicsDevice::CreateRtStateObject(RtStateObjectDesc& desc,
   ThrowIfFailed(device_->CreateStateObject(desc.desc_, IID_PPV_ARGS(&state_object)),
                 "Failed to create RT state object.");
 
+  ComPtr<ID3D12StateObjectProperties> props;
+  ThrowIfFailed(state_object.As(&props), "Failed to query RT state object properties.");
+
   return SharedDeviceChildHandle<RtStateObject>{
-    new RtStateObject{std::move(root_signature), std::move(state_object), num_32_bit_params},
+    new RtStateObject{std::move(root_signature), std::move(state_object), std::move(props), num_32_bit_params},
     DeviceChildDeleter<RtStateObject>{*this}
   };
 }

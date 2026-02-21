@@ -21,8 +21,15 @@ auto RtStateObjectDesc::AddPipelineConfig() -> CD3DX12_RAYTRACING_PIPELINE_CONFI
 }
 
 
+auto RtStateObject::GetShaderIdentifier(std::wstring_view const export_name) const -> void* {
+  return props_->GetShaderIdentifier(export_name.data());
+}
+
+
 RtStateObject::RtStateObject(Microsoft::WRL::ComPtr<ID3D12RootSignature> root_signature,
-                             Microsoft::WRL::ComPtr<ID3D12StateObject> state_object, std::uint8_t const num_params) :
-  root_signature_{std::move(root_signature)}, state_object_{std::move(state_object)}, num_params_{num_params} {
+                             Microsoft::WRL::ComPtr<ID3D12StateObject> state_object,
+                             Microsoft::WRL::ComPtr<ID3D12StateObjectProperties> props, std::uint8_t const num_params) :
+  root_signature_{std::move(root_signature)}, state_object_{std::move(state_object)}, props_{std::move(props)},
+  num_params_{num_params} {
 }
 }

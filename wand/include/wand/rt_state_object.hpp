@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string_view>
 
 #include <wand/platforms/d3d12.hpp>
 
@@ -20,11 +21,19 @@ private:
 
 
 class RtStateObject {
+public:
+  [[nodiscard]]
+  auto GetShaderIdentifier(std::wstring_view export_name) const -> void*;
+
+private:
   RtStateObject(Microsoft::WRL::ComPtr<ID3D12RootSignature> root_signature,
-                Microsoft::WRL::ComPtr<ID3D12StateObject> state_object, std::uint8_t num_params);
+                Microsoft::WRL::ComPtr<ID3D12StateObject> state_object,
+                Microsoft::WRL::ComPtr<ID3D12StateObjectProperties> props,
+                std::uint8_t num_params);
 
   Microsoft::WRL::ComPtr<ID3D12RootSignature> root_signature_;
   Microsoft::WRL::ComPtr<ID3D12StateObject> state_object_;
+  Microsoft::WRL::ComPtr<ID3D12StateObjectProperties> props_;
   std::uint8_t num_params_;
 
   friend class GraphicsDevice;
