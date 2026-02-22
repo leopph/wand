@@ -78,6 +78,7 @@ public:
   auto DestroyBuffer(Buffer const* buffer) const -> void;
   auto DestroyTexture(Texture const* texture) const -> void;
   auto DestroyPipelineState(PipelineState const* pipeline_state) const -> void;
+  auto DestroyRtStateObject(RtStateObject const* rt_state_object) const -> void;
   auto DestroyCommandList(CommandList const* command_list) const -> void;
   auto DestroyFence(Fence const* fence) const -> void;
   auto DestroySwapChain(SwapChain const* swap_chain) const -> void;

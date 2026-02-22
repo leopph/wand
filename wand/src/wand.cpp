@@ -582,6 +582,11 @@ auto GraphicsDevice::DestroyPipelineState(PipelineState const* const pipeline_st
 }
 
 
+auto GraphicsDevice::DestroyRtStateObject(RtStateObject const* rt_state_object) const -> void {
+  delete rt_state_object;
+}
+
+
 auto GraphicsDevice::DestroyCommandList(CommandList const* const command_list) const -> void {
   delete command_list;
 }
