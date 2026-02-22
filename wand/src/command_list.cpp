@@ -398,9 +398,9 @@ auto CommandList::GenerateBarrier(Buffer const& buf, D3D12_BARRIER_SYNC const sy
   auto const needs_barrier{
     (local_state->accum_access & access) != access || // The previous accesses dont cover the required access
     (local_state->accum_sync & sync) != sync || // The previous syncs dont cover the required sync
-    ((local_state->accum_access & D3D12_BARRIER_ACCESS_UNORDERED_ACCESS) == D3D12_BARRIER_ACCESS_UNORDERED_ACCESS
-      // The required access and the previous accesses both include UAV. Conservative but safe.
-      && access == D3D12_BARRIER_ACCESS_UNORDERED_ACCESS)
+    ((local_state->accum_access & D3D12_BARRIER_ACCESS_UNORDERED_ACCESS) != 0
+      // The previous accesses and the required access both include UAV. Conservative but safe.
+      && (access & D3D12_BARRIER_ACCESS_UNORDERED_ACCESS) != 0)
   };
 
   // If we don't need a barrier, we accumulate the access flags
@@ -436,20 +436,38 @@ auto CommandList::GenerateBarrier(Buffer const& buf, D3D12_BARRIER_SYNC const sy
 auto CommandList::GenerateBarrier(Texture const& tex, D3D12_BARRIER_SYNC const sync, D3D12_BARRIER_ACCESS const access,
                                   D3D12_BARRIER_LAYOUT const layout) -> void {
   auto const local_state{local_resource_states_.Get(tex.GetInternalResource())};
-  auto const needs_barrier{
-    local_state && ((local_state->layout & layout) == 0 || (local_state->accum_access & access) == 0)
-  };
 
+  // If we haven't encountered this texture on this command list since its reset,
+  // we will need a barrier to transition it from its state it was left in at the end of the last command list that used it.
+  // We can only resolve this at submit time, so we record this "pending" barrier.
   if (!local_state) {
     pending_barriers_.emplace_back(layout, tex.GetInternalResource());
   }
 
+  // If the texture has already been used on this command list, we can decide whether we need a barrier.
+
+  auto const needs_barrier{
+    local_state && (
+      (local_state->layout != layout) || // The layouts differ
+      (local_state->accum_access & access) != access || // The previous accesses dont cover the required access
+      (local_state->accum_sync & sync) != sync || // The previous syncs dont cover the required sync
+      ((local_state->accum_access & D3D12_BARRIER_ACCESS_UNORDERED_ACCESS) != 0
+        // The previous accesses and the required access both include UAV. Conservative but safe.
+        && (access & D3D12_BARRIER_ACCESS_UNORDERED_ACCESS) != 0)
+    )
+  };
+
+  // We need to record the new state. If
+  // 1. this is the first use of the resource
+  // 2. we're placing a barrier
+  // We need to record this exact state we (or the pending barrier) will put the resource in.
   if (!local_state || needs_barrier) {
     local_resource_states_.Record(tex.GetInternalResource(), {
                                     .accum_sync = sync, .accum_access = access, .layout = layout
                                   });
   }
 
+  // Place the barrier if needed
   if (needs_barrier) {
     D3D12_TEXTURE_BARRIER const barrier{
       local_state->accum_sync, sync, local_state->accum_access, access, local_state->layout, layout,
@@ -461,6 +479,16 @@ auto CommandList::GenerateBarrier(Texture const& tex, D3D12_BARRIER_SYNC const s
     };
     D3D12_BARRIER_GROUP const group{.Type = D3D12_BARRIER_TYPE_TEXTURE, .NumBarriers = 1, .pTextureBarriers = &barrier};
     cmd_list_->Barrier(1, &group);
+    return;
+  }
+
+  // Otherwise, if not first use, accumulate the access and sync flags
+  if (local_state) {
+    local_resource_states_.Record(tex.GetInternalResource(), {
+                                    .accum_sync = local_state->accum_sync | sync,
+                                    .accum_access = local_state->accum_access | access,
+                                    .layout = layout
+                                  });
   }
 }
 }

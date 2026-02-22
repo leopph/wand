@@ -618,6 +618,10 @@ auto GraphicsDevice::ExecuteCommandLists(std::span<CommandList const> const cmd_
   std::vector<D3D12_TEXTURE_BARRIER> pending_tex_barriers;
 
   for (auto const& cmd_list : cmd_lists) {
+    // We satisfy the pending barrier requests of each command list.
+    // A pending barrier is a barrier that transitions the resource from its
+    // last known state - tracked globally - to the first state used in the command list.
+    // It is a bridge between command lists and execution scopes.
     for (auto const& pending_barrier : cmd_list.pending_barriers_) {
       auto const global_state{global_resource_states_.Get(pending_barrier.resource)};
       auto layout_before{global_state ? global_state->layout : D3D12_BARRIER_LAYOUT_UNDEFINED};
@@ -632,6 +636,7 @@ auto GraphicsDevice::ExecuteCommandLists(std::span<CommandList const> const cmd_
                                         }, D3D12_TEXTURE_BARRIER_FLAG_NONE);
     }
 
+    // We record the final states of each resource used in the command list to the global state tracker
     for (auto const& [res, state] : cmd_list.local_resource_states_) {
       global_resource_states_.Record(res, {.layout = state.layout});
     }
