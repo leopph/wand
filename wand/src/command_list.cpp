@@ -58,11 +58,25 @@ auto CommandList::CopyBuffer(Buffer const& dst, Buffer const& src) -> void {
 }
 
 
+auto CommandList::CopyBuffer(BufferView const& dst, BufferView const& src) -> void {
+  CopyBuffer(*dst.GetBuffer(), *src.GetBuffer());
+}
+
+
 auto CommandList::CopyBufferRegion(Buffer const& dst, UINT64 const dst_offset, Buffer const& src,
                                    UINT64 const src_offset, UINT64 const num_bytes) -> void {
   GenerateBarrier(src, D3D12_BARRIER_SYNC_COPY, D3D12_BARRIER_ACCESS_COPY_SOURCE);
   GenerateBarrier(dst, D3D12_BARRIER_SYNC_COPY, D3D12_BARRIER_ACCESS_COPY_DEST);
   cmd_list_->CopyBufferRegion(dst.GetInternalResource(), dst_offset, src.GetInternalResource(), src_offset, num_bytes);
+}
+
+
+auto CommandList::CopyBufferRegion(BufferView const& dst, BufferView const& src) -> void {
+  if (dst.GetDesc().size < src.GetDesc().size) {
+    throw std::runtime_error{"Source buffer view is larger than destination buffer view."};
+  }
+
+  CopyBufferRegion(*dst.GetBuffer(), dst.GetDesc().offset, *src.GetBuffer(), src.GetDesc().offset, src.GetDesc().size);
 }
 
 
@@ -179,8 +193,20 @@ auto CommandList::SetBlendFactor(std::span<FLOAT const, 4> const blend_factor) c
 auto CommandList::SetIndexBuffer(Buffer const& buf, DXGI_FORMAT const index_format) -> void {
   GenerateBarrier(buf, D3D12_BARRIER_SYNC_VERTEX_SHADING, D3D12_BARRIER_ACCESS_INDEX_BUFFER);
   D3D12_INDEX_BUFFER_VIEW const ibv{
-    buf.GetInternalResource()->GetGPUVirtualAddress(), static_cast<UINT>(buf.GetInternalResource()->GetDesc1().Width),
-    index_format
+    .BufferLocation = buf.GetInternalResource()->GetGPUVirtualAddress(),
+    .SizeInBytes = static_cast<UINT>(buf.GetInternalResource()->GetDesc1().Width),
+    .Format = index_format
+  };
+  cmd_list_->IASetIndexBuffer(&ibv);
+}
+
+
+auto CommandList::SetIndexBuffer(BufferView const& buf_view, DXGI_FORMAT const index_format) -> void {
+  GenerateBarrier(*buf_view.GetBuffer(), D3D12_BARRIER_SYNC_VERTEX_SHADING, D3D12_BARRIER_ACCESS_INDEX_BUFFER);
+  D3D12_INDEX_BUFFER_VIEW const ibv{
+    .BufferLocation = buf_view.GetBuffer()->GetInternalResource()->GetGPUVirtualAddress() + buf_view.GetDesc().offset,
+    .SizeInBytes = static_cast<UINT>(buf_view.GetDesc().size),
+    .Format = index_format
   };
   cmd_list_->IASetIndexBuffer(&ibv);
 }
@@ -260,15 +286,15 @@ auto CommandList::SetPipelineParameters(UINT const index, std::span<UINT const> 
 }
 
 
-auto CommandList::SetConstantBuffer(UINT const param_idx, Buffer const& buf) -> void {
-  GenerateBarrier(buf, D3D12_BARRIER_SYNC_ALL_SHADING, D3D12_BARRIER_ACCESS_CONSTANT_BUFFER);
-  SetPipelineParameter(param_idx, buf.GetConstantBuffer());
+auto CommandList::SetConstantBuffer(UINT const param_idx, BufferView const& buf_view) -> void {
+  GenerateBarrier(*buf_view.GetBuffer(), D3D12_BARRIER_SYNC_ALL_SHADING, D3D12_BARRIER_ACCESS_CONSTANT_BUFFER);
+  SetPipelineParameter(param_idx, buf_view.GetConstantBuffer());
 }
 
 
-auto CommandList::SetShaderResource(UINT const param_idx, Buffer const& buf) -> void {
-  GenerateBarrier(buf, D3D12_BARRIER_SYNC_ALL_SHADING, D3D12_BARRIER_ACCESS_SHADER_RESOURCE);
-  SetPipelineParameter(param_idx, buf.GetShaderResource());
+auto CommandList::SetShaderResource(UINT const param_idx, BufferView const& buf_view) -> void {
+  GenerateBarrier(*buf_view.GetBuffer(), D3D12_BARRIER_SYNC_ALL_SHADING, D3D12_BARRIER_ACCESS_SHADER_RESOURCE);
+  SetPipelineParameter(param_idx, buf_view.GetShaderResource());
 }
 
 
@@ -279,9 +305,9 @@ auto CommandList::SetShaderResource(UINT const param_idx, Texture const& tex) ->
 }
 
 
-auto CommandList::SetUnorderedAccess(UINT const param_idx, Buffer const& buf) -> void {
-  GenerateBarrier(buf, D3D12_BARRIER_SYNC_ALL_SHADING, D3D12_BARRIER_ACCESS_UNORDERED_ACCESS);
-  SetPipelineParameter(param_idx, buf.GetUnorderedAccess());
+auto CommandList::SetUnorderedAccess(UINT const param_idx, BufferView const& buf_view) -> void {
+  GenerateBarrier(*buf_view.GetBuffer(), D3D12_BARRIER_SYNC_ALL_SHADING, D3D12_BARRIER_ACCESS_UNORDERED_ACCESS);
+  SetPipelineParameter(param_idx, buf_view.GetUnorderedAccess());
 }
 
 

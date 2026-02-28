@@ -11,6 +11,7 @@ auto GetActualMipLevels(TextureDesc const& desc) -> UINT {
            : desc.mip_levels;
 }
 
+
 auto Texture::GetDesc() const -> TextureDesc const& {
   return desc_;
 }
@@ -23,6 +24,16 @@ auto Texture::Map(UINT const subresource) const -> void* {
 
 auto Texture::Unmap(UINT const subresource) const -> void {
   InternalUnmap(subresource, nullptr);
+}
+
+
+auto Texture::GetShaderResource() const -> UINT {
+  return srv_.value();
+}
+
+
+auto Texture::GetUnorderedAccess() const -> UINT {
+  return uav_.value();
 }
 
 
@@ -39,8 +50,10 @@ auto Texture::GetRenderTargetView(UINT const mip_index) const -> UINT {
 Texture::Texture(ComPtr<D3D12MA::Allocation> allocation, ComPtr<ID3D12Resource2> resource, std::vector<UINT> dsvs,
                  std::vector<UINT> rtvs, std::optional<UINT> const srv, std::optional<UINT> const uav,
                  TextureDesc const& desc) :
-  Resource{std::move(allocation), std::move(resource), srv, uav},
+  Resource{std::move(allocation), std::move(resource)},
   desc_{desc},
+  srv_{srv},
+  uav_{uav},
   dsvs_{std::move(dsvs)},
   rtvs_{std::move(rtvs)} {
 }

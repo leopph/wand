@@ -14,6 +14,8 @@ auto DeviceChildDeleter<T>::operator()(T const* device_child) -> void {
   if (device_) {
     if constexpr (std::same_as<T, Buffer>) {
       device_->DestroyBuffer(device_child);
+    } else if constexpr (std::same_as<T, BufferView>) {
+      device_->DestroyBufferView(device_child);
     } else if constexpr (std::same_as<T, Texture>) {
       device_->DestroyTexture(device_child);
     } else if constexpr (std::same_as<T, PipelineState>) {
@@ -30,7 +32,9 @@ auto DeviceChildDeleter<T>::operator()(T const* device_child) -> void {
   }
 }
 
+
 template class DeviceChildDeleter<Buffer>;
+template class DeviceChildDeleter<BufferView>;
 template class DeviceChildDeleter<Texture>;
 template class DeviceChildDeleter<PipelineState>;
 template class DeviceChildDeleter<RtStateObject>;

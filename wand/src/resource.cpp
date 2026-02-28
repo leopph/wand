@@ -20,27 +20,14 @@ auto Resource::Unmap() const -> void {
 }
 
 
-auto Resource::GetShaderResource() const -> UINT {
-  return srv_.value();
-}
-
-
-auto Resource::GetUnorderedAccess() const -> UINT {
-  return uav_.value();
-}
-
-
 auto Resource::GetInternalResource() const -> ID3D12Resource2* {
   return resource_.Get();
 }
 
 
-Resource::Resource(ComPtr<D3D12MA::Allocation> allocation, ComPtr<ID3D12Resource2> resource,
-                   std::optional<UINT> const srv, std::optional<UINT> const uav) :
+Resource::Resource(ComPtr<D3D12MA::Allocation> allocation, ComPtr<ID3D12Resource2> resource) :
   allocation_{std::move(allocation)},
-  resource_{std::move(resource)},
-  srv_{srv},
-  uav_{uav} {
+  resource_{std::move(resource)} {
 }
 
 

@@ -7,6 +7,7 @@
 
 namespace wand {
 class Buffer;
+class BufferView;
 class Texture;
 class PipelineState;
 class RtStateObject;
@@ -16,6 +17,7 @@ class SwapChain;
 
 template<typename T>concept DeviceChild =
   std::same_as<std::remove_const_t<T>, Buffer> ||
+  std::same_as<std::remove_const_t<T>, BufferView> ||
   std::same_as<std::remove_const_t<T>, Texture> ||
   std::same_as<std::remove_const_t<T>, PipelineState> ||
   std::same_as<std::remove_const_t<T>, RtStateObject> ||
@@ -48,6 +50,7 @@ private:
 
 
 extern template class DeviceChildDeleter<Buffer>;
+extern template class DeviceChildDeleter<BufferView>;
 extern template class DeviceChildDeleter<Texture>;
 extern template class DeviceChildDeleter<PipelineState>;
 extern template class DeviceChildDeleter<RtStateObject>;

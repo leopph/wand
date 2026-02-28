@@ -3,6 +3,7 @@
 #include <span>
 
 #include <wand/buffer.hpp>
+#include <wand/buffer_view.hpp>
 #include <wand/descriptor_heap.hpp>
 #include <wand/pipeline.hpp>
 #include <wand/resource_state_tracker.hpp>
@@ -31,20 +32,27 @@ class CommandList {
 public:
   auto Begin(PipelineState const* pipeline_state) -> void;
   auto End() const -> void;
+
   auto ClearDepthStencil(Texture const& tex, D3D12_CLEAR_FLAGS clear_flags, FLOAT depth, UINT8 stencil,
                          std::span<D3D12_RECT const> rects, UINT16 mip_level = 0) -> void;
   auto ClearRenderTarget(Texture const& tex, std::span<FLOAT const, 4> color_rgba,
                          std::span<D3D12_RECT const> rects, UINT16 mip_level = 0) -> void;
+
   auto CopyBuffer(Buffer const& dst, Buffer const& src) -> void;
+  auto CopyBuffer(BufferView const& dst, BufferView const& src) -> void;
   auto CopyBufferRegion(Buffer const& dst, UINT64 dst_offset, Buffer const& src, UINT64 src_offset,
                         UINT64 num_bytes) -> void;
+  auto CopyBufferRegion(BufferView const& dst, BufferView const& src) -> void;
+
   auto CopyTexture(Texture const& dst, Texture const& src) -> void;
   auto CopyTextureRegion(Texture const& dst, UINT dst_subresource_index, UINT dst_x, UINT dst_y, UINT dst_z,
                          Texture const& src, UINT src_subresource_index, D3D12_BOX const* src_box) -> void;
   auto CopyTextureRegion(Texture const& dst, UINT dst_subresource_index, UINT dst_x, UINT dst_y, UINT dst_z,
                          Buffer const& src, D3D12_PLACED_SUBRESOURCE_FOOTPRINT const& src_footprint) -> void;
+
   auto DiscardRenderTarget(Texture const& tex, std::optional<D3D12_DISCARD_REGION> const& region) -> void;
   auto DiscardDepthStencil(Texture const& tex, std::optional<D3D12_DISCARD_REGION> const& region) -> void;
+
   auto Dispatch(UINT thread_group_count_x, UINT thread_group_count_y,
                 UINT thread_group_count_z) const -> void;
   auto DispatchMesh(UINT thread_group_count_x, UINT thread_group_count_y,
@@ -54,9 +62,12 @@ public:
                             INT base_vertex_location, UINT start_instance_location) const -> void;
   auto DrawInstanced(UINT vertex_count_per_instance, UINT instance_count, UINT start_vertex_location,
                      UINT start_instance_location) const -> void;
+
   auto Resolve(Texture const& dst, Texture const& src, DXGI_FORMAT format) -> void;
+
   auto SetBlendFactor(std::span<FLOAT const, 4> blend_factor) const -> void;
   auto SetIndexBuffer(Buffer const& buf, DXGI_FORMAT index_format) -> void;
+  auto SetIndexBuffer(BufferView const& buf_view, DXGI_FORMAT index_format) -> void;
   auto SetPrimitiveTopology(D3D12_PRIMITIVE_TOPOLOGY primitive_topology) const -> void;
   auto SetRenderTargets(std::span<Texture const* const> render_targets, Texture const* depth_stencil,
                         UINT16 mip_level = 0) -> void;
@@ -65,10 +76,10 @@ public:
   auto SetViewports(std::span<D3D12_VIEWPORT const> viewports) const -> void;
   auto SetPipelineParameter(UINT index, UINT value) const -> void;
   auto SetPipelineParameters(UINT index, std::span<UINT const> values) const -> void;
-  auto SetConstantBuffer(UINT param_idx, Buffer const& buf) -> void;
-  auto SetShaderResource(UINT param_idx, Buffer const& buf) -> void;
+  auto SetConstantBuffer(UINT param_idx, BufferView const& buf_view) -> void;
+  auto SetShaderResource(UINT param_idx, BufferView const& buf_view) -> void;
   auto SetShaderResource(UINT param_idx, Texture const& tex) -> void;
-  auto SetUnorderedAccess(UINT param_idx, Buffer const& buf) -> void;
+  auto SetUnorderedAccess(UINT param_idx, BufferView const& buf_view) -> void;
   auto SetUnorderedAccess(UINT param_idx, Texture const& tex) -> void;
   auto SetPipelineState(PipelineState const& pipeline_state) -> void;
   auto SetRtState(RtStateObject const& rt_state) -> void;

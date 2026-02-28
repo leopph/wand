@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 
 #include <wand/resource.hpp>
 
@@ -37,9 +38,15 @@ class Texture : public Resource {
 public:
   [[nodiscard]]
   auto GetDesc() const -> TextureDesc const&;
+
   [[nodiscard]]
   auto Map(UINT subresource) const -> void*;
   auto Unmap(UINT subresource) const -> void;
+
+  [[nodiscard]]
+  auto GetShaderResource() const -> UINT;
+  [[nodiscard]]
+  auto GetUnorderedAccess() const -> UINT;
   [[nodiscard]]
   auto GetDepthStencilView(UINT mip_index) const -> UINT;
   [[nodiscard]]
@@ -51,6 +58,8 @@ private:
           TextureDesc const& desc);
 
   TextureDesc desc_;
+  std::optional<UINT> srv_;
+  std::optional<UINT> uav_;
   // One per mip
   std::vector<UINT> dsvs_;
   // One per mip

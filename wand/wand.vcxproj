@@ -95,6 +95,7 @@
       <WarningLevel Condition="'$(Configuration)|$(Platform)'=='Release|x64'">TurnOffAllWarnings</WarningLevel>
     </ClCompile>
     <ClCompile Include="src\buffer.cpp" />
+    <ClCompile Include="src\buffer_view.cpp" />
     <ClCompile Include="src\command_list.cpp" />
     <ClCompile Include="src\common.cpp" />
     <ClCompile Include="src\descriptor_heap.cpp" />
@@ -113,6 +114,7 @@
   <ItemGroup>
     <ClInclude Include="include\wand\barrier.hpp" />
     <ClInclude Include="include\wand\buffer.hpp" />
+    <ClInclude Include="include\wand\buffer_view.hpp" />
     <ClInclude Include="include\wand\command_list.hpp" />
     <ClInclude Include="include\wand\common.hpp" />
     <ClInclude Include="include\wand\descriptor_heap.hpp" />

@@ -10,6 +10,7 @@
 #include <vector>
 
 #include <wand/buffer.hpp>
+#include <wand/buffer_view.hpp>
 #include <wand/command_list.hpp>
 #include <wand/descriptor_heap.hpp>
 #include <wand/device_child.hpp>
@@ -59,6 +60,9 @@ public:
   auto operator=(GraphicsDevice&&) -> void = delete;
 
   [[nodiscard]] auto CreateBuffer(BufferDesc const& desc, CpuAccess cpu_access) -> SharedDeviceChildHandle<Buffer>;
+  [[nodiscard]] auto CreateBufferView(BufferViewDesc const& desc,
+                                      SharedDeviceChildHandle<Buffer> buffer) -> SharedDeviceChildHandle<BufferView>;
+
   [[nodiscard]] auto CreateTexture(TextureDesc const& desc, CpuAccess cpu_access,
                                    D3D12_CLEAR_VALUE const* clear_value) -> SharedDeviceChildHandle<Texture>;
   [[nodiscard]] auto CreatePipelineState(PipelineDesc const& desc,
@@ -76,6 +80,7 @@ public:
                                std::vector<SharedDeviceChildHandle<Texture>>* textures) -> void;
 
   auto DestroyBuffer(Buffer const* buffer) const -> void;
+  auto DestroyBufferView(BufferView const* buffer_view) const -> void;
   auto DestroyTexture(Texture const* texture) const -> void;
   auto DestroyPipelineState(PipelineState const* pipeline_state) const -> void;
   auto DestroyRtStateObject(RtStateObject const* rt_state_object) const -> void;
@@ -103,7 +108,7 @@ public:
 private:
   auto SwapChainCreateTextures(SwapChain& swap_chain) -> void;
 
-  auto CreateBufferViews(ID3D12Resource2& buffer, BufferDesc const& desc, UINT& cbv, UINT& srv,
+  auto CreateInternalBufferViews(ID3D12Resource2& buffer, BufferViewDesc const& desc, UINT& cbv, UINT& srv,
                          UINT& uav) const -> void;
   auto CreateTextureViews(ID3D12Resource2& texture, TextureDesc const& desc, std::vector<UINT>& dsvs,
                           std::vector<UINT>& rtvs, std::optional<UINT>& srv,

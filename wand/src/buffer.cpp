@@ -8,15 +8,8 @@ auto Buffer::GetDesc() const -> BufferDesc const& {
 }
 
 
-auto Buffer::GetConstantBuffer() const -> UINT {
-  return cbv_.value();
-}
-
-
-Buffer::Buffer(ComPtr<D3D12MA::Allocation> allocation, ComPtr<ID3D12Resource2> resource, std::optional<UINT> const cbv,
-               std::optional<UINT> const srv, std::optional<UINT> const uav, BufferDesc const& desc) :
-  Resource{std::move(allocation), std::move(resource), srv, uav},
-  desc_{desc},
-  cbv_{cbv} {
+Buffer::Buffer(ComPtr<D3D12MA::Allocation> allocation, ComPtr<ID3D12Resource2> resource, BufferDesc const& desc) :
+  Resource{std::move(allocation), std::move(resource)},
+  desc_{desc} {
 }
 }
