@@ -1,8 +1,9 @@
-#include "wand/root_signature_cache.hpp"
+#include "wand/detail/root_signature_cache.hpp"
 
 using Microsoft::WRL::ComPtr;
 
-namespace wand::details {
+
+namespace wand::detail {
 auto RootSignatureCache::Add(std::uint8_t const num_params,
                              ComPtr<ID3D12RootSignature> root_signature) -> ComPtr<ID3D12RootSignature> {
   std::scoped_lock const lock{mutex_};

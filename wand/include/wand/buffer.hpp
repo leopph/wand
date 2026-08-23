@@ -1,6 +1,8 @@
 #pragma once
 
 #include <wand/resource.hpp>
+#include <wand/wandapi.hpp>
+
 
 namespace wand {
 struct BufferDesc {
@@ -12,11 +14,12 @@ struct BufferDesc {
   bool acceleration_structure;
 };
 
+
 class Buffer : public Resource {
 public:
-  [[nodiscard]]
+  [[nodiscard]] WANDAPI
   auto GetDesc() const -> BufferDesc const&;
-  [[nodiscard]]
+  [[nodiscard]] WANDAPI
   auto GetConstantBuffer() const -> UINT;
 
 private:

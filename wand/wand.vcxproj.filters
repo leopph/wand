@@ -54,10 +54,10 @@
     <ClCompile Include="src\command_list.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\descriptor_heap.cpp">
+    <ClCompile Include="src\detail\descriptor_heap.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\root_signature_cache.cpp">
+    <ClCompile Include="src\detail\root_signature_cache.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="src\rt_state_object.cpp">
@@ -107,13 +107,13 @@
     <ClInclude Include="include\wand\pipeline.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="include\wand\descriptor_heap.hpp">
+    <ClInclude Include="include\wand\detail\descriptor_heap.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="include\wand\root_signature_cache.hpp">
+    <ClInclude Include="include\wand\detail\root_signature_cache.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="include\wand\resource_state_tracker.hpp">
+    <ClInclude Include="include\wand\detail\resource_state_tracker.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\wand\barrier.hpp">
@@ -122,13 +122,16 @@
     <ClInclude Include="include\wand\rt_state_object.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="include\wand\wandapi.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
     <None Include="include\wand\util.inl">
       <Filter>Header Files</Filter>
     </None>
-    <None Include="include\wand\resource_state_tracker.inl">
+    <None Include="include\wand\detail\resource_state_tracker.inl">
       <Filter>Header Files</Filter>
     </None>
   </ItemGroup>

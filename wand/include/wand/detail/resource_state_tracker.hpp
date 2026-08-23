@@ -5,13 +5,14 @@
 
 #include <wand/platforms/d3d12.hpp>
 
-namespace wand::details {
+
+namespace wand::detail {
 template<typename ResourceStateType>
 class ResourceStateTracker {
 public:
-  auto Record(ID3D12Resource* const resource, ResourceStateType const state) -> void;
+  auto Record(ID3D12Resource* resource, ResourceStateType state) -> void;
 
-  [[nodiscard]] auto Get(ID3D12Resource* const resource) const -> std::optional<ResourceStateType>;
+  [[nodiscard]] auto Get(ID3D12Resource* resource) const -> std::optional<ResourceStateType>;
   auto Clear() -> void;
 
   [[nodiscard]] auto begin() const;
@@ -38,4 +39,5 @@ using GlobalResourceStateTracker = ResourceStateTracker<GlobalResourceState>;
 using PipelineResourceStateTracker = ResourceStateTracker<PipelineResourceState>;
 }
 
-#include <wand/resource_state_tracker.inl>
+
+#include <wand/detail/resource_state_tracker.inl>

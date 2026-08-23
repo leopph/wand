@@ -3,7 +3,9 @@
 #include <concepts>
 #include <type_traits>
 
+#include <wand/wandapi.hpp>
 #include <wand/platforms/d3d12.hpp>
+
 
 namespace wand {
 class Buffer;
@@ -39,8 +41,8 @@ template<DeviceChild T>
 class DeviceChildDeleter {
 public:
   DeviceChildDeleter() = default;
-  explicit DeviceChildDeleter(GraphicsDevice& device);
-  auto operator()(T const* device_child) -> void;
+  explicit WANDAPI DeviceChildDeleter(GraphicsDevice& device);
+  WANDAPI auto operator()(T const* device_child) -> void;
 
 private:
   GraphicsDevice* device_;

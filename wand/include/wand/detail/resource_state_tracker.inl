@@ -4,12 +4,14 @@
 
 #include <iterator>
 
-namespace wand::details {
+
+namespace wand::detail {
 template<typename ResourceStateType>
 auto ResourceStateTracker<ResourceStateType>::Record(ID3D12Resource* const resource,
                                                      ResourceStateType const state) -> void {
   resource_states_[resource] = state;
 }
+
 
 template<typename ResourceStateType>
 auto ResourceStateTracker<ResourceStateType>::Get(
@@ -21,15 +23,18 @@ auto ResourceStateTracker<ResourceStateType>::Get(
   return std::nullopt;
 }
 
+
 template<typename ResourceStateType>
 auto ResourceStateTracker<ResourceStateType>::Clear() -> void {
   resource_states_.clear();
 }
 
+
 template<typename ResourceStateType>
 auto ResourceStateTracker<ResourceStateType>::begin() const {
   return std::begin(resource_states_);
 }
+
 
 template<typename ResourceStateType>
 auto ResourceStateTracker<ResourceStateType>::end() const {

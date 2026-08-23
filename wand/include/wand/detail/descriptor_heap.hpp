@@ -4,7 +4,8 @@
 
 #include <wand/platforms/d3d12.hpp>
 
-namespace wand::details {
+
+namespace wand::detail {
 class DescriptorHeap {
 public:
   [[nodiscard]] auto Allocate() -> UINT;

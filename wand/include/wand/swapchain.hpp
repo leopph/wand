@@ -3,6 +3,8 @@
 #include <span>
 
 #include <wand/device_child.hpp>
+#include <wand/wandapi.hpp>
+
 
 namespace wand {
 struct SwapChainDesc {
@@ -17,11 +19,19 @@ struct SwapChainDesc {
 
 class SwapChain {
 public:
-  [[nodiscard]] auto GetTextures() const -> std::span<SharedDeviceChildHandle<Texture const> const>;
-  [[nodiscard]] auto GetCurrentTextureIndex() const -> UINT;
-  [[nodiscard]] auto GetCurrentTexture() const -> Texture const&;
+  [[nodiscard]] WANDAPI
+  auto GetTextures() const -> std::span<SharedDeviceChildHandle<Texture const> const>;
 
-  [[nodiscard]] auto GetSyncInterval() const -> UINT;
+  [[nodiscard]] WANDAPI
+  auto GetCurrentTextureIndex() const -> UINT;
+
+  [[nodiscard]] WANDAPI
+  auto GetCurrentTexture() const -> Texture const&;
+
+  [[nodiscard]] WANDAPI
+  auto GetSyncInterval() const -> UINT;
+
+  WANDAPI
   auto SetSyncInterval(UINT sync_interval) -> void;
 
 private:

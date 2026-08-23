@@ -3,22 +3,32 @@
 #include <optional>
 #include <string_view>
 
+#include <wand/wandapi.hpp>
 #include <wand/platforms/d3d12.hpp>
+
 
 namespace wand {
 class GraphicsDevice;
 
+
 class Resource {
 public:
+  WANDAPI
   auto SetDebugName(std::wstring_view name) const -> void;
-  [[nodiscard]]
+
+  [[nodiscard]] WANDAPI
   auto Map() const -> void*;
+
+  WANDAPI
   auto Unmap() const -> void;
-  [[nodiscard]]
+
+  [[nodiscard]] WANDAPI
   auto GetShaderResource() const -> UINT;
-  [[nodiscard]]
+
+  [[nodiscard]] WANDAPI
   auto GetUnorderedAccess() const -> UINT;
-  [[nodiscard]]
+
+  [[nodiscard]] WANDAPI
   auto GetInternalResource() const -> ID3D12Resource2*;
 
 protected:

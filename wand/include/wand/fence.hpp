@@ -1,13 +1,22 @@
 #pragma once
 
+#include <wand/wandapi.hpp>
 #include <wand/platforms/d3d12.hpp>
+
 
 namespace wand {
 class Fence {
 public:
-  [[nodiscard]] auto GetNextValue() const -> UINT64;
-  [[nodiscard]] auto GetCompletedValue() const -> UINT64;
+  [[nodiscard]] WANDAPI
+  auto GetNextValue() const -> UINT64;
+
+  [[nodiscard]] WANDAPI
+  auto GetCompletedValue() const -> UINT64;
+
+  WANDAPI
   auto Wait(UINT64 wait_value) const -> void;
+
+  WANDAPI
   auto Signal() -> void;
 
 private:

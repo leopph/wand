@@ -3,6 +3,8 @@
 #include <cstdint>
 
 #include <wand/resource.hpp>
+#include <wand/wandapi.hpp>
+
 
 namespace wand {
 enum class TextureDimension : std::uint8_t {
@@ -30,19 +32,25 @@ struct TextureDesc {
 
 
 // Get the actual mip level count of the texture. In TextureDesc, mip_levels can be 0, which means that the mip level count is auto calculated.
-[[nodiscard]] auto GetActualMipLevels(TextureDesc const& desc) -> UINT;
+[[nodiscard]] WANDAPI
+auto GetActualMipLevels(TextureDesc const& desc) -> UINT;
 
 
 class Texture : public Resource {
 public:
-  [[nodiscard]]
+  [[nodiscard]] WANDAPI
   auto GetDesc() const -> TextureDesc const&;
-  [[nodiscard]]
+
+  [[nodiscard]] WANDAPI
   auto Map(UINT subresource) const -> void*;
+
+  WANDAPI
   auto Unmap(UINT subresource) const -> void;
-  [[nodiscard]]
+
+  [[nodiscard]] WANDAPI
   auto GetDepthStencilView(UINT mip_index) const -> UINT;
-  [[nodiscard]]
+
+  [[nodiscard]] WANDAPI
   auto GetRenderTargetView(UINT mip_index) const -> UINT;
 
 private:

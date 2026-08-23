@@ -74,18 +74,18 @@ auto AsD3d12Desc(TextureDesc const& desc) -> D3D12_RESOURCE_DESC1 {
   }
 
   switch (desc.dimension) {
-  case TextureDimension::k1D: {
-    return CD3DX12_RESOURCE_DESC1::Tex1D(desc.format, desc.width, desc.depth_or_array_size, desc.mip_levels, flags);
-  }
-  case TextureDimension::k2D: [[fallthrough]];
-  case TextureDimension::kCube: {
-    return CD3DX12_RESOURCE_DESC1::Tex2D(desc.format, desc.width, desc.height, desc.depth_or_array_size,
-                                         desc.mip_levels, desc.sample_count, 0, flags);
-  }
-  case TextureDimension::k3D: {
-    return CD3DX12_RESOURCE_DESC1::Tex3D(desc.format, desc.width, desc.height, desc.depth_or_array_size,
-                                         desc.mip_levels, flags);
-  }
+    case TextureDimension::k1D: {
+      return CD3DX12_RESOURCE_DESC1::Tex1D(desc.format, desc.width, desc.depth_or_array_size, desc.mip_levels, flags);
+    }
+    case TextureDimension::k2D: [[fallthrough]];
+    case TextureDimension::kCube: {
+      return CD3DX12_RESOURCE_DESC1::Tex2D(desc.format, desc.width, desc.height, desc.depth_or_array_size,
+        desc.mip_levels, desc.sample_count, 0, flags);
+    }
+    case TextureDimension::k3D: {
+      return CD3DX12_RESOURCE_DESC1::Tex3D(desc.format, desc.width, desc.height, desc.depth_or_array_size,
+        desc.mip_levels, flags);
+    }
   }
 
   throw std::runtime_error{"Trying to convert invalid an TextureDesc to D3D12_RESOURCE_DESC1."};
@@ -102,7 +102,7 @@ GraphicsDevice::GraphicsDevice(bool const enable_debug, bool const use_sw_render
     ComPtr<IDXGIInfoQueue> dxgi_info_queue;
     ThrowIfFailed(DXGIGetDebugInterface1(0, IID_PPV_ARGS(&dxgi_info_queue)), "Failed to get DXGI debug interface.");
     ThrowIfFailed(dxgi_info_queue->SetBreakOnSeverity(DXGI_DEBUG_ALL, DXGI_INFO_QUEUE_MESSAGE_SEVERITY_ERROR, TRUE),
-                  "Failed to set debug break on DXGI error.");
+      "Failed to set debug break on DXGI error.");
     ThrowIfFailed(
       dxgi_info_queue->SetBreakOnSeverity(DXGI_DEBUG_ALL, DXGI_INFO_QUEUE_MESSAGE_SEVERITY_CORRUPTION, TRUE),
       "Failed to set debug break on DXGI corruption.");
@@ -122,19 +122,19 @@ GraphicsDevice::GraphicsDevice(bool const enable_debug, bool const use_sw_render
     ThrowIfFailed(factory_->EnumWarpAdapter(IID_PPV_ARGS(&adapter)), "Failed to get WARP adapter.");
   } else {
     ThrowIfFailed(factory_->EnumAdapterByGpuPreference(0, DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE, IID_PPV_ARGS(&adapter)),
-                  "Failed to get high performance adapter.");
+      "Failed to get high performance adapter.");
   }
 
   ThrowIfFailed(D3D12CreateDevice(adapter.Get(), D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&device_)),
-                "Failed to create D3D12 device.");
+    "Failed to create D3D12 device.");
 
   if (enable_debug) {
     ComPtr<ID3D12InfoQueue> d3d12_info_queue;
     ThrowIfFailed(device_.As(&d3d12_info_queue), "Failed to get D3D12 info queue.");
     ThrowIfFailed(d3d12_info_queue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_ERROR, TRUE),
-                  "Failed to set debug break on D3D12 error.");
+      "Failed to set debug break on D3D12 error.");
     ThrowIfFailed(d3d12_info_queue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_CORRUPTION, TRUE),
-                  "Failed to set debug break on D3D12 corruption.");
+      "Failed to set debug break on D3D12 corruption.");
   }
 
   ThrowIfFailed(supported_features_.Init(device_.Get()), "Failed to query D3D12 features.");
@@ -173,30 +173,30 @@ GraphicsDevice::GraphicsDevice(bool const enable_debug, bool const use_sw_render
   };
   ComPtr<ID3D12DescriptorHeap> rtv_heap;
   ThrowIfFailed(device_->CreateDescriptorHeap(&rtv_heap_desc, IID_PPV_ARGS(&rtv_heap)), "Failed to create RTV heap.");
-  rtv_heap_ = std::make_unique<details::DescriptorHeap>(std::move(rtv_heap), *device_.Get());
+  rtv_heap_ = std::make_unique<detail::DescriptorHeap>(std::move(rtv_heap), *device_.Get());
 
   D3D12_DESCRIPTOR_HEAP_DESC constexpr dsv_heap_desc{
     D3D12_DESCRIPTOR_HEAP_TYPE_DSV, dsv_heap_size_, D3D12_DESCRIPTOR_HEAP_FLAG_NONE, 0
   };
   ComPtr<ID3D12DescriptorHeap> dsv_heap;
   ThrowIfFailed(device_->CreateDescriptorHeap(&dsv_heap_desc, IID_PPV_ARGS(&dsv_heap)), "Failed to create DSV heap.");
-  dsv_heap_ = std::make_unique<details::DescriptorHeap>(std::move(dsv_heap), *device_.Get());
+  dsv_heap_ = std::make_unique<detail::DescriptorHeap>(std::move(dsv_heap), *device_.Get());
 
   D3D12_DESCRIPTOR_HEAP_DESC constexpr res_desc_heap_desc{
     D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, res_desc_heap_size_, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE, 0
   };
   ComPtr<ID3D12DescriptorHeap> res_desc_heap;
   ThrowIfFailed(device_->CreateDescriptorHeap(&res_desc_heap_desc, IID_PPV_ARGS(&res_desc_heap)),
-                "Failed to create resource descriptor heap.");
-  res_desc_heap_ = std::make_unique<details::DescriptorHeap>(std::move(res_desc_heap), *device_.Get());
+    "Failed to create resource descriptor heap.");
+  res_desc_heap_ = std::make_unique<detail::DescriptorHeap>(std::move(res_desc_heap), *device_.Get());
 
   D3D12_DESCRIPTOR_HEAP_DESC constexpr sampler_heap_desc{
     D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER, sampler_heap_size_, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE, 0
   };
   ComPtr<ID3D12DescriptorHeap> sampler_heap;
   ThrowIfFailed(device_->CreateDescriptorHeap(&sampler_heap_desc, IID_PPV_ARGS(&sampler_heap)),
-                "Failed to create sampler heap.");
-  sampler_heap_ = std::make_unique<details::DescriptorHeap>(std::move(sampler_heap), *device_.Get());
+    "Failed to create sampler heap.");
+  sampler_heap_ = std::make_unique<detail::DescriptorHeap>(std::move(sampler_heap), *device_.Get());
 
   D3D12_COMMAND_QUEUE_DESC constexpr queue_desc{
     D3D12_COMMAND_LIST_TYPE_DIRECT, D3D12_COMMAND_QUEUE_PRIORITY_NORMAL, D3D12_COMMAND_QUEUE_FLAG_NONE, 0
@@ -227,7 +227,7 @@ auto GraphicsDevice::CreateBuffer(BufferDesc const& desc,
   auto const res_desc{AsD3d12Desc(desc)};
 
   ThrowIfFailed(allocator_->CreateResource3(&alloc_desc, &res_desc, D3D12_BARRIER_LAYOUT_UNDEFINED, nullptr, 0, nullptr,
-                                            &allocation, IID_PPV_ARGS(&resource)), "Failed to create buffer.");
+    &allocation, IID_PPV_ARGS(&resource)), "Failed to create buffer.");
 
   UINT cbv;
   UINT srv;
@@ -262,7 +262,7 @@ auto GraphicsDevice::CreateTexture(TextureDesc const& desc,
   constexpr auto initial_layout{D3D12_BARRIER_LAYOUT_UNDEFINED};
 
   ThrowIfFailed(allocator_->CreateResource3(&alloc_desc, &res_desc, initial_layout, clear_value, 0, nullptr,
-                                            &allocation, IID_PPV_ARGS(&resource)), "Failed to create texture.");
+    &allocation, IID_PPV_ARGS(&resource)), "Failed to create texture.");
 
   std::vector<UINT> dsvs;
   std::vector<UINT> rtvs;
@@ -312,7 +312,7 @@ auto GraphicsDevice::CreatePipelineState(PipelineDesc const& desc,
 
   D3D12_PIPELINE_STATE_STREAM_DESC const stream_desc{sizeof(pso_desc), &pso_desc};
   ThrowIfFailed(device_->CreatePipelineState(&stream_desc, IID_PPV_ARGS(&pipeline_state)),
-                "Failed to create pipeline state.");
+    "Failed to create pipeline state.");
 
   return SharedDeviceChildHandle<PipelineState>{
     new PipelineState{
@@ -333,7 +333,7 @@ auto GraphicsDevice::CreateRtStateObject(RtStateObjectDesc& desc,
 
   ComPtr<ID3D12StateObject> state_object;
   ThrowIfFailed(device_->CreateStateObject(desc.desc_, IID_PPV_ARGS(&state_object)),
-                "Failed to create RT state object.");
+    "Failed to create RT state object.");
 
   ComPtr<ID3D12StateObjectProperties> props;
   ThrowIfFailed(state_object.As(&props), "Failed to query RT state object properties.");
@@ -348,12 +348,12 @@ auto GraphicsDevice::CreateRtStateObject(RtStateObjectDesc& desc,
 auto GraphicsDevice::CreateCommandList() -> SharedDeviceChildHandle<CommandList> {
   ComPtr<ID3D12CommandAllocator> allocator;
   ThrowIfFailed(device_->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&allocator)),
-                "Failed to create command allocator.");
+    "Failed to create command allocator.");
 
   ComPtr<ID3D12GraphicsCommandList7> cmd_list;
   ThrowIfFailed(
     device_->CreateCommandList1(0, D3D12_COMMAND_LIST_TYPE_DIRECT, D3D12_COMMAND_LIST_FLAG_NONE,
-                                IID_PPV_ARGS(&cmd_list)), "Failed to create command list.");
+      IID_PPV_ARGS(&cmd_list)), "Failed to create command list.");
 
   return SharedDeviceChildHandle<CommandList>{
     new CommandList{
@@ -368,7 +368,7 @@ auto GraphicsDevice::CreateCommandList() -> SharedDeviceChildHandle<CommandList>
 auto GraphicsDevice::CreateFence(UINT64 const initial_value) -> SharedDeviceChildHandle<Fence> {
   ComPtr<ID3D12Fence1> fence;
   ThrowIfFailed(device_->CreateFence(initial_value, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence)),
-                "Failed to create fence.");
+    "Failed to create fence.");
   return SharedDeviceChildHandle<Fence>{
     new Fence{std::move(fence), initial_value + 1}, DeviceChildDeleter<Fence>{*this}
   };
@@ -390,7 +390,7 @@ auto GraphicsDevice::CreateSwapChain(SwapChainDesc const& desc,
   ComPtr<IDXGISwapChain4> swap_chain4;
   ThrowIfFailed(swap_chain1.As(&swap_chain4), "Failed to query IDXGISwapChain4 interface.");
   ThrowIfFailed(factory_->MakeWindowAssociation(window_handle, DXGI_MWA_NO_ALT_ENTER),
-                "Failed to disable swap chain ALT+ENTER behavior.");
+    "Failed to disable swap chain ALT+ENTER behavior.");
 
   auto const swap_chain{new SwapChain{std::move(swap_chain4), present_flags_}};
   SwapChainCreateTextures(*swap_chain);
@@ -460,7 +460,7 @@ auto GraphicsDevice::CreateAliasingResources(std::span<BufferDesc const> const b
     };
 
     ThrowIfFailed(allocator_->AllocateMemory(&alloc_desc, &alloc_info, &buf_alloc),
-                  "Failed to allocate memory for aliasing resources.");
+      "Failed to allocate memory for aliasing resources.");
 
     rt_ds_alloc = buf_alloc;
     non_rt_ds_alloc = buf_alloc;
@@ -471,7 +471,7 @@ auto GraphicsDevice::CreateAliasingResources(std::span<BufferDesc const> const b
       };
 
       ThrowIfFailed(allocator_->AllocateMemory(&buf_alloc_desc, &buf_alloc_info, &buf_alloc),
-                    "Failed to allocate memory for aliasing buffers.");
+        "Failed to allocate memory for aliasing buffers.");
     }
 
     if (rt_ds_alloc_info.SizeInBytes > 0) {
@@ -480,7 +480,7 @@ auto GraphicsDevice::CreateAliasingResources(std::span<BufferDesc const> const b
       };
 
       ThrowIfFailed(allocator_->AllocateMemory(&rt_ds_alloc_desc, &rt_ds_alloc_info, &rt_ds_alloc),
-                    "Failed to allocate memory for aliasing RT/DS textures.");
+        "Failed to allocate memory for aliasing RT/DS textures.");
     }
 
     if (non_rt_ds_alloc_info.SizeInBytes > 0) {
@@ -489,7 +489,7 @@ auto GraphicsDevice::CreateAliasingResources(std::span<BufferDesc const> const b
       };
 
       ThrowIfFailed(allocator_->AllocateMemory(&non_rt_ds_alloc_desc, &non_rt_ds_alloc_info, &non_rt_ds_alloc),
-                    "Failed to allocate memory for aliasing non-RT/DS textures.");
+        "Failed to allocate memory for aliasing non-RT/DS textures.");
     }
   }
 
@@ -499,15 +499,15 @@ auto GraphicsDevice::CreateAliasingResources(std::span<BufferDesc const> const b
       ComPtr<ID3D12Resource2> resource;
 
       ThrowIfFailed(allocator_->CreateAliasingResource2(buf_alloc.Get(), 0, &desc, D3D12_BARRIER_LAYOUT_UNDEFINED,
-                                                        nullptr, 0, nullptr, IID_PPV_ARGS(&resource)),
-                    "Failed to create aliasing buffer.");
+          nullptr, 0, nullptr, IID_PPV_ARGS(&resource)),
+        "Failed to create aliasing buffer.");
 
       UINT cbv;
       UINT srv;
       UINT uav;
       CreateBufferViews(*resource.Get(), buf_desc, cbv, srv, uav);
       buffers->emplace_back(new Buffer{buf_alloc, std::move(resource), cbv, srv, uav, buf_desc},
-                            DeviceChildDeleter<Buffer>{*this});
+        DeviceChildDeleter<Buffer>{*this});
     }
   }
 
@@ -519,8 +519,8 @@ auto GraphicsDevice::CreateAliasingResources(std::span<BufferDesc const> const b
 
       ComPtr<ID3D12Resource2> resource;
       ThrowIfFailed(allocator_->CreateAliasingResource2(alloc.Get(), 0, &desc, info.initial_layout, info.clear_value, 0,
-                                                        nullptr, IID_PPV_ARGS(&resource)),
-                    "Failed to create aliasing texture.");
+          nullptr, IID_PPV_ARGS(&resource)),
+        "Failed to create aliasing texture.");
 
       std::vector<UINT> dsvs;
       std::vector<UINT> rtvs;
@@ -528,8 +528,8 @@ auto GraphicsDevice::CreateAliasingResources(std::span<BufferDesc const> const b
       std::optional<UINT> uav;
       CreateTextureViews(*resource.Get(), info.desc, dsvs, rtvs, srv, uav);
       textures->emplace_back(new Texture{
-                               alloc, std::move(resource), std::move(dsvs), std::move(rtvs), srv, uav, info.desc
-                             }, DeviceChildDeleter<Texture>{*this});
+        alloc, std::move(resource), std::move(dsvs), std::move(rtvs), srv, uav, info.desc
+      }, DeviceChildDeleter<Texture>{*this});
     }
   }
 }
@@ -632,13 +632,13 @@ auto GraphicsDevice::ExecuteCommandLists(std::span<CommandList const> const cmd_
       auto layout_before{global_state ? global_state->layout : D3D12_BARRIER_LAYOUT_UNDEFINED};
 
       pending_tex_barriers.emplace_back(D3D12_BARRIER_SYNC_NONE, D3D12_BARRIER_SYNC_NONE,
-                                        D3D12_BARRIER_ACCESS_NO_ACCESS, D3D12_BARRIER_ACCESS_NO_ACCESS,
-                                        layout_before, pending_barrier.layout, pending_barrier.resource,
-                                        D3D12_BARRIER_SUBRESOURCE_RANGE{
-                                          .IndexOrFirstMipLevel = 0xffffffff, .NumMipLevels = 0, .FirstArraySlice = 0,
-                                          .NumArraySlices = 0,
-                                          .FirstPlane = 0, .NumPlanes = 0
-                                        }, D3D12_TEXTURE_BARRIER_FLAG_NONE);
+        D3D12_BARRIER_ACCESS_NO_ACCESS, D3D12_BARRIER_ACCESS_NO_ACCESS,
+        layout_before, pending_barrier.layout, pending_barrier.resource,
+        D3D12_BARRIER_SUBRESOURCE_RANGE{
+          .IndexOrFirstMipLevel = 0xffffffff, .NumMipLevels = 0, .FirstArraySlice = 0,
+          .NumArraySlices = 0,
+          .FirstPlane = 0, .NumPlanes = 0
+        }, D3D12_TEXTURE_BARRIER_FLAG_NONE);
     }
 
     // We record the final states of each resource used in the command list to the global state tracker
@@ -658,7 +658,7 @@ auto GraphicsDevice::ExecuteCommandLists(std::span<CommandList const> const cmd_
   pending_barrier_cmd.cmd_list_->Barrier(1, &pending_barrier_group);
   pending_barrier_cmd.End();
   queue_->ExecuteCommandLists(1,
-                              std::array{static_cast<ID3D12CommandList*>(pending_barrier_cmd.cmd_list_.Get())}.data());
+    std::array{static_cast<ID3D12CommandList*>(pending_barrier_cmd.cmd_list_.Get())}.data());
   SignalFence(*execute_barrier_fence_);
 
   std::vector<ID3D12CommandList*> submit_list;
@@ -680,7 +680,7 @@ auto GraphicsDevice::WaitIdle() const -> void {
 auto GraphicsDevice::ResizeSwapChain(SwapChain& swap_chain, UINT const width, UINT const height) -> void {
   swap_chain.textures_.clear();
   ThrowIfFailed(swap_chain.swap_chain_->ResizeBuffers(0, width, height, DXGI_FORMAT_UNKNOWN, swap_chain_flags_),
-                "Failed to resize swap chain buffers.");
+    "Failed to resize swap chain buffers.");
   SwapChainCreateTextures(swap_chain);
 }
 
@@ -719,7 +719,7 @@ auto GraphicsDevice::Present(SwapChain const& swap_chain) -> void {
   }
 
   ThrowIfFailed(swap_chain.swap_chain_->Present(swap_chain.GetSyncInterval(), present_flags_),
-                "Failed to present swap chain.");
+    "Failed to present swap chain.");
 }
 
 
@@ -729,7 +729,7 @@ auto GraphicsDevice::GetCopyableFootprints(TextureDesc const& desc, UINT const f
                                            UINT64* const row_sizes, UINT64* const total_size) const -> void {
   auto const tex_desc{AsD3d12Desc(desc)};
   return device_->GetCopyableFootprints1(&tex_desc, first_subresource, subresource_count, base_offset, layouts,
-                                         row_counts, row_sizes, total_size);
+    row_counts, row_sizes, total_size);
 }
 
 
@@ -765,9 +765,9 @@ auto GraphicsDevice::SwapChainCreateTextures(SwapChain& swap_chain) -> void {
     global_resource_states_.Record(buf.Get(), {.layout = D3D12_BARRIER_LAYOUT_COMMON});
 
     swap_chain.textures_.emplace_back(new Texture{
-                                        nullptr, std::move(buf), {}, std::move(rtvs), srv,
-                                        kInvalidResourceIndex, tex_desc
-                                      }, DeviceChildDeleter<Texture>{*this});
+      nullptr, std::move(buf), {}, std::move(rtvs), srv,
+      kInvalidResourceIndex, tex_desc
+    }, DeviceChildDeleter<Texture>{*this});
   }
 }
 
@@ -878,7 +878,7 @@ auto GraphicsDevice::CreateTextureViews(ID3D12Resource2& texture, TextureDesc co
           dsv_desc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2DMS;
         }
       } else if ((desc.dimension == TextureDimension::k2D && desc.depth_or_array_size > 1) || desc.dimension ==
-        TextureDimension::kCube) {
+                 TextureDimension::kCube) {
         if (desc.sample_count == 1) {
           dsv_desc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2DARRAY;
           dsv_desc.Texture2DArray.MipSlice = i;
@@ -923,7 +923,7 @@ auto GraphicsDevice::CreateTextureViews(ID3D12Resource2& texture, TextureDesc co
           rtv_desc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2DMS;
         }
       } else if ((desc.dimension == TextureDimension::k2D && desc.depth_or_array_size > 1) || desc.dimension ==
-        TextureDimension::kCube) {
+                 TextureDimension::kCube) {
         if (desc.sample_count == 1) {
           rtv_desc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2DARRAY;
           rtv_desc.Texture2DArray.MipSlice = i;
@@ -1040,7 +1040,7 @@ auto GraphicsDevice::CreateTextureViews(ID3D12Resource2& texture, TextureDesc co
         uav_desc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2DMS;
       }
     } else if ((desc.dimension == TextureDimension::k2D && desc.depth_or_array_size > 1) || desc.dimension ==
-      TextureDimension::k3D) {
+               TextureDimension::k3D) {
       if (desc.sample_count == 1) {
         uav_desc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2DARRAY;
         uav_desc.Texture2DArray.MipSlice = 0;
@@ -1085,12 +1085,12 @@ auto GraphicsDevice::AcquirePendingBarrierCmdList() -> CommandList& {
 
 auto GraphicsDevice::MakeHeapType(CpuAccess const cpu_access) const -> D3D12_HEAP_TYPE {
   switch (cpu_access) {
-  case CpuAccess::kNone:
-    return D3D12_HEAP_TYPE_DEFAULT;
-  case CpuAccess::kRead:
-    return D3D12_HEAP_TYPE_READBACK;
-  case CpuAccess::kWrite:
-    return supported_features_.GPUUploadHeapSupported() ? D3D12_HEAP_TYPE_GPU_UPLOAD : D3D12_HEAP_TYPE_UPLOAD;
+    case CpuAccess::kNone:
+      return D3D12_HEAP_TYPE_DEFAULT;
+    case CpuAccess::kRead:
+      return D3D12_HEAP_TYPE_READBACK;
+    case CpuAccess::kWrite:
+      return supported_features_.GPUUploadHeapSupported() ? D3D12_HEAP_TYPE_GPU_UPLOAD : D3D12_HEAP_TYPE_UPLOAD;
   }
 
   throw std::runtime_error{"Failed to make D3D12 heap type: unknown CPU access type."};
@@ -1120,10 +1120,10 @@ auto GraphicsDevice::GetOrCreateRootSignature(
     ComPtr<ID3DBlob> error_blob;
 
     ThrowIfFailed(D3D12SerializeVersionedRootSignature(&root_signature_desc, &root_signature_blob, &error_blob),
-                  "Failed to serialize root signature.");
+      "Failed to serialize root signature.");
     ThrowIfFailed(device_->CreateRootSignature(0, root_signature_blob->GetBufferPointer(),
-                                               root_signature_blob->GetBufferSize(), IID_PPV_ARGS(&root_signature)),
-                  "Failed to create root signature.");
+        root_signature_blob->GetBufferSize(), IID_PPV_ARGS(&root_signature)),
+      "Failed to create root signature.");
 
     root_signature = root_signatures_.Add(num_32_bit_params, std::move(root_signature));
   }

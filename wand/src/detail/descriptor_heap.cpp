@@ -1,4 +1,4 @@
-#include "wand/descriptor_heap.hpp"
+#include "wand/detail/descriptor_heap.hpp"
 
 #include <algorithm>
 
@@ -6,7 +6,8 @@
 
 using Microsoft::WRL::ComPtr;
 
-namespace wand::details {
+
+namespace wand::detail {
 auto DescriptorHeap::Allocate() -> UINT {
   std::scoped_lock const lock{mutex_};
 

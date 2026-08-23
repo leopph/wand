@@ -2,6 +2,7 @@
 
 #include <wand/platforms/d3d12.hpp>
 
+
 namespace wand {
 struct PipelineDesc {
   D3D12_PRIMITIVE_TOPOLOGY_TYPE primitive_topology_type{D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE};
