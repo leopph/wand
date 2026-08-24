@@ -14,6 +14,12 @@ auto ResourceStateTracker<ResourceStateType>::Record(ID3D12Resource* const resou
 
 
 template<typename ResourceStateType>
+auto ResourceStateTracker<ResourceStateType>::Erase(ID3D12Resource* const resource) -> void {
+  resource_states_.erase(resource);
+}
+
+
+template<typename ResourceStateType>
 auto ResourceStateTracker<ResourceStateType>::Get(
   ID3D12Resource* const resource) const -> std::optional<ResourceStateType> {
   if (auto const it{resource_states_.find(resource)}; it != std::end(resource_states_)) {

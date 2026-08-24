@@ -12,11 +12,18 @@ class ResourceStateTracker {
 public:
   auto Record(ID3D12Resource* resource, ResourceStateType state) -> void;
 
-  [[nodiscard]] auto Get(ID3D12Resource* resource) const -> std::optional<ResourceStateType>;
+  auto Erase(ID3D12Resource* resource) -> void;
+
+  [[nodiscard]]
+  auto Get(ID3D12Resource* resource) const -> std::optional<ResourceStateType>;
+
   auto Clear() -> void;
 
-  [[nodiscard]] auto begin() const;
-  [[nodiscard]] auto end() const;
+  [[nodiscard]]
+  auto begin() const;
+
+  [[nodiscard]]
+  auto end() const;
 
 private:
   std::unordered_map<ID3D12Resource*, ResourceStateType> resource_states_;

@@ -541,7 +541,7 @@ auto GraphicsDevice::CreateAliasingResources(std::span<BufferDesc const> const b
 }
 
 
-auto GraphicsDevice::DestroyBuffer(Buffer const* const buffer) const -> void {
+auto GraphicsDevice::DestroyBuffer(Buffer const* const buffer) -> void {
   if (buffer) {
     if (buffer->cbv_) {
       res_desc_heap_->Release(*buffer->cbv_);
@@ -555,12 +555,17 @@ auto GraphicsDevice::DestroyBuffer(Buffer const* const buffer) const -> void {
       res_desc_heap_->Release(*buffer->uav_);
     }
 
+    {
+      std::scoped_lock const lck{state_tracker_mutex_};
+      global_resource_states_.Erase(buffer->resource_.Get());
+    }
+
     delete buffer;
   }
 }
 
 
-auto GraphicsDevice::DestroyTexture(Texture const* const texture) const -> void {
+auto GraphicsDevice::DestroyTexture(Texture const* const texture) -> void {
   if (texture) {
     std::ranges::for_each(texture->dsvs_, [this](UINT const dsv) {
       dsv_heap_->Release(dsv);
@@ -578,37 +583,50 @@ auto GraphicsDevice::DestroyTexture(Texture const* const texture) const -> void 
       res_desc_heap_->Release(*texture->uav_);
     }
 
+    {
+      std::scoped_lock const lck{state_tracker_mutex_};
+      global_resource_states_.Erase(texture->resource_.Get());
+    }
+
     delete texture;
   }
 }
 
 
-auto GraphicsDevice::DestroyPipelineState(PipelineState const* const pipeline_state) const -> void {
+auto GraphicsDevice::DestroyPipelineState(PipelineState const* const pipeline_state) -> void {
   delete pipeline_state;
 }
 
 
-auto GraphicsDevice::DestroyRtStateObject(RtStateObject const* rt_state_object) const -> void {
+auto GraphicsDevice::DestroyRtStateObject(RtStateObject const* rt_state_object) -> void {
   delete rt_state_object;
 }
 
 
-auto GraphicsDevice::DestroyCommandList(CommandList const* const command_list) const -> void {
+auto GraphicsDevice::DestroyCommandList(CommandList const* const command_list) -> void {
   delete command_list;
 }
 
 
-auto GraphicsDevice::DestroyFence(Fence const* const fence) const -> void {
+auto GraphicsDevice::DestroyFence(Fence const* const fence) -> void {
   delete fence;
 }
 
 
-auto GraphicsDevice::DestroySwapChain(SwapChain const* const swap_chain) const -> void {
+auto GraphicsDevice::DestroySwapChain(SwapChain const* const swap_chain) -> void {
+  {
+    std::scoped_lock const lck{state_tracker_mutex_};
+
+    for (auto const& tex : swap_chain->textures_) {
+      global_resource_states_.Erase(tex->resource_.Get());
+    }
+  }
+
   delete swap_chain;
 }
 
 
-auto GraphicsDevice::DestroySampler(UINT const sampler) const -> void {
+auto GraphicsDevice::DestroySampler(UINT const sampler) -> void {
   sampler_heap_->Release(sampler);
 }
 
@@ -690,6 +708,14 @@ auto GraphicsDevice::WaitIdle() const -> void {
 
 
 auto GraphicsDevice::ResizeSwapChain(SwapChain& swap_chain, UINT const width, UINT const height) -> void {
+  {
+    std::scoped_lock const lck{state_tracker_mutex_};
+
+    for (auto const& tex : swap_chain.textures_) {
+      global_resource_states_.Erase(tex->resource_.Get());
+    }
+  }
+
   swap_chain.textures_.clear();
   ThrowIfFailed(swap_chain.swap_chain_->ResizeBuffers(0, width, height, DXGI_FORMAT_UNKNOWN, swap_chain_flags_),
     "Failed to resize swap chain buffers.");

@@ -92,28 +92,28 @@ public:
                                std::vector<SharedDeviceChildHandle<Texture>>* textures) -> void;
 
   WANDAPI
-  auto DestroyBuffer(Buffer const* buffer) const -> void;
+  auto DestroyBuffer(Buffer const* buffer) -> void;
 
   WANDAPI
-  auto DestroyTexture(Texture const* texture) const -> void;
+  auto DestroyTexture(Texture const* texture) -> void;
 
   WANDAPI
-  auto DestroyPipelineState(PipelineState const* pipeline_state) const -> void;
+  auto DestroyPipelineState(PipelineState const* pipeline_state) -> void;
 
   WANDAPI
-  auto DestroyRtStateObject(RtStateObject const* rt_state_object) const -> void;
+  auto DestroyRtStateObject(RtStateObject const* rt_state_object) -> void;
 
   WANDAPI
-  auto DestroyCommandList(CommandList const* command_list) const -> void;
+  auto DestroyCommandList(CommandList const* command_list) -> void;
 
   WANDAPI
-  auto DestroyFence(Fence const* fence) const -> void;
+  auto DestroyFence(Fence const* fence) -> void;
 
   WANDAPI
-  auto DestroySwapChain(SwapChain const* swap_chain) const -> void;
+  auto DestroySwapChain(SwapChain const* swap_chain) -> void;
 
   WANDAPI
-  auto DestroySampler(UINT sampler) const -> void;
+  auto DestroySampler(UINT sampler) -> void;
 
   WANDAPI
   auto WaitFence(Fence const& fence, UINT64 wait_value) const -> void;
