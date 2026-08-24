@@ -628,13 +628,16 @@ auto GraphicsDevice::SignalFence(Fence& fence) const -> void {
 auto GraphicsDevice::ExecuteCommandLists(std::span<CommandList const> const cmd_lists) -> void {
   std::scoped_lock const queue_lck{queue_submission_mutex_};
 
-  std::vector<D3D12_TEXTURE_BARRIER> pending_tex_barriers;
+  // For the time being, Wand cannot synchronize arbitrary command lists in a single scope.
+  // So we are submitting each command list in its own scope.
+  // This is correct, just potentially slower.
+  for (auto const& cmd_list : cmd_lists) {
+    std::vector<D3D12_TEXTURE_BARRIER> pending_tex_barriers;
 
-  {
-    std::scoped_lock const tracker_lck{state_tracker_mutex_};
+    {
+      std::scoped_lock const tracker_lck{state_tracker_mutex_};
 
-    for (auto const& cmd_list : cmd_lists) {
-      // We satisfy the pending barrier requests of each command list.
+      // We satisfy the pending barrier requests of the command list.
       // A pending barrier is a barrier that transitions the resource from its
       // last known state - tracked globally - to the first state used in the command list.
       // It is a bridge between command lists and execution scopes.
@@ -657,30 +660,25 @@ auto GraphicsDevice::ExecuteCommandLists(std::span<CommandList const> const cmd_
         global_resource_states_.Record(res, {.layout = state.layout});
       }
     }
+
+    if (!pending_tex_barriers.empty()) {
+      D3D12_BARRIER_GROUP const pending_barrier_group{
+        .Type = D3D12_BARRIER_TYPE_TEXTURE, .NumBarriers = ClampCast<UINT32>(pending_tex_barriers.size()),
+        .pTextureBarriers = pending_tex_barriers.data()
+      };
+
+      auto& pending_barrier_cmd{AcquirePendingBarrierCmdList()};
+
+      pending_barrier_cmd.Begin(nullptr);
+      pending_barrier_cmd.cmd_list_->Barrier(1, &pending_barrier_group);
+      pending_barrier_cmd.End();
+      queue_->ExecuteCommandLists(1,
+        std::array{static_cast<ID3D12CommandList*>(pending_barrier_cmd.cmd_list_.Get())}.data());
+      SignalFenceUnlocked(*execute_barrier_fence_);
+    }
+
+    queue_->ExecuteCommandLists(1, CommandListCast(cmd_list.cmd_list_.GetAddressOf()));
   }
-
-  if (!pending_tex_barriers.empty()) {
-    D3D12_BARRIER_GROUP const pending_barrier_group{
-      .Type = D3D12_BARRIER_TYPE_TEXTURE, .NumBarriers = ClampCast<UINT32>(pending_tex_barriers.size()),
-      .pTextureBarriers = pending_tex_barriers.data()
-    };
-
-    auto& pending_barrier_cmd{AcquirePendingBarrierCmdList()};
-
-    pending_barrier_cmd.Begin(nullptr);
-    pending_barrier_cmd.cmd_list_->Barrier(1, &pending_barrier_group);
-    pending_barrier_cmd.End();
-    queue_->ExecuteCommandLists(1,
-      std::array{static_cast<ID3D12CommandList*>(pending_barrier_cmd.cmd_list_.Get())}.data());
-    SignalFenceUnlocked(*execute_barrier_fence_);
-  }
-
-  std::vector<ID3D12CommandList*> submit_list;
-  submit_list.reserve(cmd_lists.size());
-  std::ranges::transform(cmd_lists, std::back_inserter(submit_list), [](CommandList const& cmd_list) {
-    return cmd_list.cmd_list_.Get();
-  });
-  queue_->ExecuteCommandLists(static_cast<UINT>(submit_list.size()), submit_list.data());
 }
 
 
