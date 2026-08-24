@@ -659,19 +659,21 @@ auto GraphicsDevice::ExecuteCommandLists(std::span<CommandList const> const cmd_
     }
   }
 
-  D3D12_BARRIER_GROUP const pending_barrier_group{
-    .Type = D3D12_BARRIER_TYPE_TEXTURE, .NumBarriers = ClampCast<UINT32>(pending_tex_barriers.size()),
-    .pTextureBarriers = pending_tex_barriers.data()
-  };
+  if (!pending_tex_barriers.empty()) {
+    D3D12_BARRIER_GROUP const pending_barrier_group{
+      .Type = D3D12_BARRIER_TYPE_TEXTURE, .NumBarriers = ClampCast<UINT32>(pending_tex_barriers.size()),
+      .pTextureBarriers = pending_tex_barriers.data()
+    };
 
-  auto& pending_barrier_cmd{AcquirePendingBarrierCmdList()};
+    auto& pending_barrier_cmd{AcquirePendingBarrierCmdList()};
 
-  pending_barrier_cmd.Begin(nullptr);
-  pending_barrier_cmd.cmd_list_->Barrier(1, &pending_barrier_group);
-  pending_barrier_cmd.End();
-  queue_->ExecuteCommandLists(1,
-    std::array{static_cast<ID3D12CommandList*>(pending_barrier_cmd.cmd_list_.Get())}.data());
-  SignalFenceUnlocked(*execute_barrier_fence_);
+    pending_barrier_cmd.Begin(nullptr);
+    pending_barrier_cmd.cmd_list_->Barrier(1, &pending_barrier_group);
+    pending_barrier_cmd.End();
+    queue_->ExecuteCommandLists(1,
+      std::array{static_cast<ID3D12CommandList*>(pending_barrier_cmd.cmd_list_.Get())}.data());
+    SignalFenceUnlocked(*execute_barrier_fence_);
+  }
 
   std::vector<ID3D12CommandList*> submit_list;
   submit_list.reserve(cmd_lists.size());
