@@ -153,7 +153,7 @@ private:
                           std::optional<UINT>& uav) const -> void;
 
   auto WaitFenceUnlocked(Fence const& fence, UINT64 wait_value) const -> void;
-  auto SignalFenceUnlocked(Fence& fence) const -> void;
+  auto SignalFenceUnlocked(Fence& fence) const -> UINT64;
 
   [[nodiscard]]
   auto AcquirePendingBarrierCmdList() -> CommandList&;

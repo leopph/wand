@@ -701,8 +701,13 @@ auto GraphicsDevice::ExecuteCommandLists(std::span<CommandList const> const cmd_
 
 
 auto GraphicsDevice::WaitIdle() const -> void {
-  auto const fence_val{idle_fence_->GetNextValue()};
-  SignalFence(*idle_fence_);
+  UINT64 fence_val;
+
+  {
+    std::scoped_lock const lck{queue_submission_mutex_};
+    fence_val = SignalFenceUnlocked(*idle_fence_);
+  }
+
   idle_fence_->Wait(fence_val);
 }
 
@@ -1115,10 +1120,11 @@ auto GraphicsDevice::WaitFenceUnlocked(Fence const& fence, UINT64 const wait_val
 }
 
 
-auto GraphicsDevice::SignalFenceUnlocked(Fence& fence) const -> void {
+auto GraphicsDevice::SignalFenceUnlocked(Fence& fence) const -> UINT64 {
   auto const new_fence_val{fence.next_val_.load()};
   ThrowIfFailed(queue_->Signal(fence.fence_.Get(), new_fence_val), "Failed to signal fence from GPU queue.");
   fence.next_val_ = new_fence_val + 1;
+  return new_fence_val;
 }
 
 
