@@ -608,18 +608,20 @@ auto GraphicsDevice::DestroySampler(UINT const sampler) const -> void {
 
 
 auto GraphicsDevice::WaitFence(Fence const& fence, UINT64 const wait_value) const -> void {
-  ThrowIfFailed(queue_->Wait(fence.fence_.Get(), wait_value), "Failed to wait fence from GPU queue.");
+  std::scoped_lock const lck{queue_submission_mutex_};
+  WaitFenceUnlocked(fence, wait_value);
 }
 
 
 auto GraphicsDevice::SignalFence(Fence& fence) const -> void {
-  auto const new_fence_val{fence.next_val_.load()};
-  ThrowIfFailed(queue_->Signal(fence.fence_.Get(), new_fence_val), "Failed to signal fence from GPU queue.");
-  fence.next_val_ = new_fence_val + 1;
+  std::scoped_lock const lck{queue_submission_mutex_};
+  SignalFenceUnlocked(fence);
 }
 
 
 auto GraphicsDevice::ExecuteCommandLists(std::span<CommandList const> const cmd_lists) -> void {
+  std::scoped_lock const lock{queue_submission_mutex_};
+
   std::vector<D3D12_TEXTURE_BARRIER> pending_tex_barriers;
 
   for (auto const& cmd_list : cmd_lists) {
@@ -659,7 +661,7 @@ auto GraphicsDevice::ExecuteCommandLists(std::span<CommandList const> const cmd_
   pending_barrier_cmd.End();
   queue_->ExecuteCommandLists(1,
     std::array{static_cast<ID3D12CommandList*>(pending_barrier_cmd.cmd_list_.Get())}.data());
-  SignalFence(*execute_barrier_fence_);
+  SignalFenceUnlocked(*execute_barrier_fence_);
 
   std::vector<ID3D12CommandList*> submit_list;
   submit_list.reserve(cmd_lists.size());
@@ -686,6 +688,8 @@ auto GraphicsDevice::ResizeSwapChain(SwapChain& swap_chain, UINT const width, UI
 
 
 auto GraphicsDevice::Present(SwapChain const& swap_chain) -> void {
+  std::scoped_lock const lck{queue_submission_mutex_};
+
   auto const cur_tex{swap_chain.GetCurrentTexture().resource_.Get()};
   auto const state{global_resource_states_.Get(cur_tex)};
   auto const layout_before{state ? state->layout : D3D12_BARRIER_LAYOUT_UNDEFINED};
@@ -715,7 +719,7 @@ auto GraphicsDevice::Present(SwapChain const& swap_chain) -> void {
     cmd_list.End();
 
     queue_->ExecuteCommandLists(1, std::array{static_cast<ID3D12CommandList*>(cmd_list.cmd_list_.Get())}.data());
-    SignalFence(*execute_barrier_fence_);
+    SignalFenceUnlocked(*execute_barrier_fence_);
   }
 
   ThrowIfFailed(swap_chain.swap_chain_->Present(swap_chain.GetSyncInterval(), present_flags_),
@@ -1066,9 +1070,19 @@ auto GraphicsDevice::CreateTextureViews(ID3D12Resource2& texture, TextureDesc co
 }
 
 
-auto GraphicsDevice::AcquirePendingBarrierCmdList() -> CommandList& {
-  std::unique_lock const lock{execute_barrier_mutex_};
+auto GraphicsDevice::WaitFenceUnlocked(Fence const& fence, UINT64 const wait_value) const -> void {
+  ThrowIfFailed(queue_->Wait(fence.fence_.Get(), wait_value), "Failed to wait fence from GPU queue.");
+}
 
+
+auto GraphicsDevice::SignalFenceUnlocked(Fence& fence) const -> void {
+  auto const new_fence_val{fence.next_val_.load()};
+  ThrowIfFailed(queue_->Signal(fence.fence_.Get(), new_fence_val), "Failed to signal fence from GPU queue.");
+  fence.next_val_ = new_fence_val + 1;
+}
+
+
+auto GraphicsDevice::AcquirePendingBarrierCmdList() -> CommandList& {
   auto const completed_fence_val{execute_barrier_fence_->GetCompletedValue()};
   auto const next_fence_val{execute_barrier_fence_->GetNextValue()};
 

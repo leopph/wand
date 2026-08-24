@@ -1,7 +1,5 @@
 #pragma once
 
-#include <atomic>
-#include <concepts>
 #include <cstdint>
 #include <memory>
 #include <mutex>
@@ -154,12 +152,17 @@ private:
                           std::vector<UINT>& rtvs, std::optional<UINT>& srv,
                           std::optional<UINT>& uav) const -> void;
 
-  [[nodiscard]] auto AcquirePendingBarrierCmdList() -> CommandList&;
+  auto WaitFenceUnlocked(Fence const& fence, UINT64 wait_value) const -> void;
+  auto SignalFenceUnlocked(Fence& fence) const -> void;
 
-  [[nodiscard]] auto MakeHeapType(CpuAccess cpu_access) const -> D3D12_HEAP_TYPE;
+  [[nodiscard]]
+  auto AcquirePendingBarrierCmdList() -> CommandList&;
 
-  [[nodiscard]] auto GetOrCreateRootSignature(
-    std::uint8_t num_32_bit_params) -> Microsoft::WRL::ComPtr<ID3D12RootSignature>;
+  [[nodiscard]]
+  auto MakeHeapType(CpuAccess cpu_access) const -> D3D12_HEAP_TYPE;
+
+  [[nodiscard]]
+  auto GetOrCreateRootSignature(std::uint8_t num_32_bit_params) -> Microsoft::WRL::ComPtr<ID3D12RootSignature>;
 
   static UINT const rtv_heap_size_;
   static UINT const dsv_heap_size_;
@@ -186,8 +189,8 @@ private:
   SharedDeviceChildHandle<Fence> idle_fence_;
   SharedDeviceChildHandle<Fence> execute_barrier_fence_;
 
+  mutable std::mutex queue_submission_mutex_;
   std::vector<details::ExecuteBarrierCmdListRecord> execute_barrier_cmd_lists_;
-  std::mutex execute_barrier_mutex_;
 
   CD3DX12FeatureSupport supported_features_;
 };
