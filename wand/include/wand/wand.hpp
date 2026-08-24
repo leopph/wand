@@ -181,6 +181,8 @@ private:
   Microsoft::WRL::ComPtr<ID3D12CommandQueue> queue_;
 
   detail::RootSignatureCache root_signatures_;
+
+  std::mutex state_tracker_mutex_;
   detail::GlobalResourceStateTracker global_resource_states_;
 
   UINT swap_chain_flags_{0};

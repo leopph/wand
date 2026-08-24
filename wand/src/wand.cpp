@@ -235,7 +235,10 @@ auto GraphicsDevice::CreateBuffer(BufferDesc const& desc,
 
   CreateBufferViews(*resource.Get(), desc, cbv, srv, uav);
 
-  global_resource_states_.Record(resource.Get(), {.layout = D3D12_BARRIER_LAYOUT_UNDEFINED});
+  {
+    std::scoped_lock const lck{state_tracker_mutex_};
+    global_resource_states_.Record(resource.Get(), {.layout = D3D12_BARRIER_LAYOUT_UNDEFINED});
+  }
 
   return SharedDeviceChildHandle<Buffer>{
     new Buffer{std::move(allocation), std::move(resource), cbv, srv, uav, desc},
@@ -271,7 +274,10 @@ auto GraphicsDevice::CreateTexture(TextureDesc const& desc,
 
   CreateTextureViews(*resource.Get(), desc, dsvs, rtvs, srv, uav);
 
-  global_resource_states_.Record(resource.Get(), {.layout = initial_layout});
+  {
+    std::scoped_lock const lck{state_tracker_mutex_};
+    global_resource_states_.Record(resource.Get(), {.layout = initial_layout});
+  }
 
   return SharedDeviceChildHandle<Texture>{
     new Texture{std::move(allocation), std::move(resource), std::move(dsvs), std::move(rtvs), srv, uav, desc},
@@ -620,32 +626,36 @@ auto GraphicsDevice::SignalFence(Fence& fence) const -> void {
 
 
 auto GraphicsDevice::ExecuteCommandLists(std::span<CommandList const> const cmd_lists) -> void {
-  std::scoped_lock const lock{queue_submission_mutex_};
+  std::scoped_lock const queue_lck{queue_submission_mutex_};
 
   std::vector<D3D12_TEXTURE_BARRIER> pending_tex_barriers;
 
-  for (auto const& cmd_list : cmd_lists) {
-    // We satisfy the pending barrier requests of each command list.
-    // A pending barrier is a barrier that transitions the resource from its
-    // last known state - tracked globally - to the first state used in the command list.
-    // It is a bridge between command lists and execution scopes.
-    for (auto const& pending_barrier : cmd_list.pending_barriers_) {
-      auto const global_state{global_resource_states_.Get(pending_barrier.resource)};
-      auto layout_before{global_state ? global_state->layout : D3D12_BARRIER_LAYOUT_UNDEFINED};
+  {
+    std::scoped_lock const tracker_lck{state_tracker_mutex_};
 
-      pending_tex_barriers.emplace_back(D3D12_BARRIER_SYNC_NONE, D3D12_BARRIER_SYNC_NONE,
-        D3D12_BARRIER_ACCESS_NO_ACCESS, D3D12_BARRIER_ACCESS_NO_ACCESS,
-        layout_before, pending_barrier.layout, pending_barrier.resource,
-        D3D12_BARRIER_SUBRESOURCE_RANGE{
-          .IndexOrFirstMipLevel = 0xffffffff, .NumMipLevels = 0, .FirstArraySlice = 0,
-          .NumArraySlices = 0,
-          .FirstPlane = 0, .NumPlanes = 0
-        }, D3D12_TEXTURE_BARRIER_FLAG_NONE);
-    }
+    for (auto const& cmd_list : cmd_lists) {
+      // We satisfy the pending barrier requests of each command list.
+      // A pending barrier is a barrier that transitions the resource from its
+      // last known state - tracked globally - to the first state used in the command list.
+      // It is a bridge between command lists and execution scopes.
+      for (auto const& pending_barrier : cmd_list.pending_barriers_) {
+        auto const global_state{global_resource_states_.Get(pending_barrier.resource)};
+        auto layout_before{global_state ? global_state->layout : D3D12_BARRIER_LAYOUT_UNDEFINED};
 
-    // We record the final states of each resource used in the command list to the global state tracker
-    for (auto const& [res, state] : cmd_list.local_resource_states_) {
-      global_resource_states_.Record(res, {.layout = state.layout});
+        pending_tex_barriers.emplace_back(D3D12_BARRIER_SYNC_NONE, D3D12_BARRIER_SYNC_NONE,
+          D3D12_BARRIER_ACCESS_NO_ACCESS, D3D12_BARRIER_ACCESS_NO_ACCESS,
+          layout_before, pending_barrier.layout, pending_barrier.resource,
+          D3D12_BARRIER_SUBRESOURCE_RANGE{
+            .IndexOrFirstMipLevel = 0xffffffff, .NumMipLevels = 0, .FirstArraySlice = 0,
+            .NumArraySlices = 0,
+            .FirstPlane = 0, .NumPlanes = 0
+          }, D3D12_TEXTURE_BARRIER_FLAG_NONE);
+      }
+
+      // We record the final states of each resource used in the command list to the global state tracker
+      for (auto const& [res, state] : cmd_list.local_resource_states_) {
+        global_resource_states_.Record(res, {.layout = state.layout});
+      }
     }
   }
 
@@ -688,7 +698,8 @@ auto GraphicsDevice::ResizeSwapChain(SwapChain& swap_chain, UINT const width, UI
 
 
 auto GraphicsDevice::Present(SwapChain const& swap_chain) -> void {
-  std::scoped_lock const lck{queue_submission_mutex_};
+  std::scoped_lock const queue_lck{queue_submission_mutex_};
+  std::scoped_lock const state_tracker_lck{state_tracker_mutex_};
 
   auto const cur_tex{swap_chain.GetCurrentTexture().resource_.Get()};
   auto const state{global_resource_states_.Get(cur_tex)};
@@ -766,7 +777,10 @@ auto GraphicsDevice::SwapChainCreateTextures(SwapChain& swap_chain) -> void {
 
     CreateTextureViews(*buf.Get(), tex_desc, dsvs, rtvs, srv, uav);
 
-    global_resource_states_.Record(buf.Get(), {.layout = D3D12_BARRIER_LAYOUT_COMMON});
+    {
+      std::scoped_lock const lck{state_tracker_mutex_};
+      global_resource_states_.Record(buf.Get(), {.layout = D3D12_BARRIER_LAYOUT_COMMON});
+    }
 
     swap_chain.textures_.emplace_back(new Texture{
       nullptr, std::move(buf), {}, std::move(rtvs), srv,
