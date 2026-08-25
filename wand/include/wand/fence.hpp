@@ -1,5 +1,7 @@
 #pragma once
 
+#include <mutex>
+
 #include <wand/wandapi.hpp>
 #include <wand/platforms/d3d12.hpp>
 
@@ -24,6 +26,7 @@ private:
 
   Microsoft::WRL::ComPtr<ID3D12Fence> fence_;
   std::atomic<UINT64> next_val_;
+  std::mutex mutex_;
 
   friend class GraphicsDevice;
 };

@@ -1121,6 +1121,7 @@ auto GraphicsDevice::WaitFenceUnlocked(Fence const& fence, UINT64 const wait_val
 
 
 auto GraphicsDevice::SignalFenceUnlocked(Fence& fence) const -> UINT64 {
+  std::scoped_lock const lck{fence.mutex_};
   auto const new_fence_val{fence.next_val_.load()};
   ThrowIfFailed(queue_->Signal(fence.fence_.Get(), new_fence_val), "Failed to signal fence from GPU queue.");
   fence.next_val_ = new_fence_val + 1;

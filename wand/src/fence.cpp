@@ -4,6 +4,7 @@
 
 using Microsoft::WRL::ComPtr;
 
+
 namespace wand {
 auto Fence::GetNextValue() const -> UINT64 {
   return next_val_;
@@ -21,6 +22,7 @@ auto Fence::Wait(UINT64 const wait_value) const -> void {
 
 
 auto Fence::Signal() -> void {
+  std::scoped_lock const lck{mutex_};
   auto const new_fence_val{next_val_.load()};
   ThrowIfFailed(fence_->Signal(new_fence_val), "Failed to signal fence from the CPU.");
   next_val_ = new_fence_val + 1;
@@ -29,6 +31,5 @@ auto Fence::Signal() -> void {
 
 Fence::Fence(ComPtr<ID3D12Fence> fence, UINT64 const next_value) :
   fence_{std::move(fence)},
-  next_val_{next_value} {
-}
+  next_val_{next_value} {}
 }
