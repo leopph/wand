@@ -6,6 +6,7 @@
 #include <iterator>
 
 #include "wand/common.hpp"
+#include "wand/platforms/detail/d3d12_internals.hpp"
 
 using Microsoft::WRL::ComPtr;
 
@@ -370,41 +371,25 @@ auto CommandList::GenerateBarrier(Buffer const& buf, D3D12_BARRIER_SYNC const sy
                                   D3D12_BARRIER_ACCESS const access) -> void {
   auto const local_state{local_resource_states_.Get(buf.GetInternalResource())};
 
-  // We don't deal with buffers globally, only locally within command lists.
-  // This means that we have to assume the worst about the state of a buffer
-  // that we encounter for the first time in a command list and we have to
-  // place a barrier to transition it from this unknown state.
+  // This builds heavily on the fact that wand::GraphicsDevice::ExecuteCommandLists
+  // dispatches each command list in its own ExecuteCommandLists scope.
+  // This way the first use of a buffer on a command list is guaranteed to also be
+  // the first use in the scope. This is important because the D3D12 Enhanced Barriers
+  // spec allows the first use of a buffer in an ECL scope to be barrier-free.
   if (!local_state) {
-    D3D12_BUFFER_BARRIER const barrier{
-      .SyncBefore = D3D12_BARRIER_SYNC_NONE,
-      .SyncAfter = sync,
-      .AccessBefore = D3D12_BARRIER_ACCESS_NO_ACCESS,
-      .AccessAfter = access,
-      .pResource = buf.GetInternalResource(),
-      .Offset = 0,
-      .Size = UINT64_MAX
-    };
-    D3D12_BARRIER_GROUP const group{.Type = D3D12_BARRIER_TYPE_BUFFER, .NumBarriers = 1, .pBufferBarriers = &barrier};
-    cmd_list_->Barrier(1, &group);
-
     local_resource_states_.Record(buf.GetInternalResource(), {
-      .accum_sync = sync, .accum_access = access, .layout = D3D12_BARRIER_LAYOUT_UNDEFINED
+      .accum_sync = sync,
+      .accum_access = access,
+      .layout = D3D12_BARRIER_LAYOUT_UNDEFINED
     });
     return;
   }
 
-  // If the buffer has already been used on this command list, we can decide whether we need a barrier.
+  auto const prev_access_was_write = d3d12::detail::IsWriteAccess(local_state->accum_access);
+  auto const this_access_is_write = d3d12::detail::IsWriteAccess(access);
 
-  auto const needs_barrier{
-    (local_state->accum_access & access) != access || // The previous accesses dont cover the required access
-    (local_state->accum_sync & sync) != sync || // The previous syncs dont cover the required sync
-    ((local_state->accum_access & D3D12_BARRIER_ACCESS_UNORDERED_ACCESS) != 0
-     // The previous accesses and the required access both include UAV. Conservative but safe.
-     && (access & D3D12_BARRIER_ACCESS_UNORDERED_ACCESS) != 0)
-  };
-
-  // If we don't need a barrier, we accumulate the access flags
-  if (!needs_barrier) {
+  // Read -> read requires no barrier for buffers.
+  if (!prev_access_was_write && !this_access_is_write) {
     local_resource_states_.Record(buf.GetInternalResource(), {
       .accum_sync = local_state->accum_sync | sync,
       .accum_access = local_state->accum_access | access,
@@ -413,7 +398,8 @@ auto CommandList::GenerateBarrier(Buffer const& buf, D3D12_BARRIER_SYNC const sy
     return;
   }
 
-  // If we need a barrier, we place it and store the new access and sync flags
+  // Either the previous access was a write or the current access is a write, so we're placing a barrier.
+  // There are some special cases that allow parallel reading and writing, but we don't support those here.
 
   D3D12_BUFFER_BARRIER const barrier{
     .SyncBefore = local_state->accum_sync,
@@ -424,11 +410,19 @@ auto CommandList::GenerateBarrier(Buffer const& buf, D3D12_BARRIER_SYNC const sy
     .Offset = 0,
     .Size = UINT64_MAX
   };
-  D3D12_BARRIER_GROUP const group{.Type = D3D12_BARRIER_TYPE_BUFFER, .NumBarriers = 1, .pBufferBarriers = &barrier};
+
+  D3D12_BARRIER_GROUP const group{
+    .Type = D3D12_BARRIER_TYPE_BUFFER,
+    .NumBarriers = 1,
+    .pBufferBarriers = &barrier
+  };
+
   cmd_list_->Barrier(1, &group);
 
   local_resource_states_.Record(buf.GetInternalResource(), {
-    .accum_sync = sync, .accum_access = access, .layout = D3D12_BARRIER_LAYOUT_UNDEFINED
+    .accum_sync = sync,
+    .accum_access = access,
+    .layout = D3D12_BARRIER_LAYOUT_UNDEFINED
   });
 }
 
