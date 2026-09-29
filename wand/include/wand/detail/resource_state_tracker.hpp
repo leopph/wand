@@ -15,7 +15,7 @@ public:
   auto Erase(ID3D12Resource* resource) -> void;
 
   [[nodiscard]]
-  auto Get(ID3D12Resource* resource) const -> std::optional<ResourceStateType>;
+  auto Get(ID3D12Resource* resource) -> ResourceStateType*;
 
   auto Clear() -> void;
 

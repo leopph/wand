@@ -369,7 +369,7 @@ CommandList::CommandList(ComPtr<ID3D12CommandAllocator> allocator, ComPtr<ID3D12
 
 auto CommandList::GenerateBarrier(Buffer const& buf, D3D12_BARRIER_SYNC const sync,
                                   D3D12_BARRIER_ACCESS const access) -> void {
-  auto const local_state{local_resource_states_.Get(buf.GetInternalResource())};
+  auto* const local_state{local_resource_states_.Get(buf.GetInternalResource())};
 
   // This builds heavily on the fact that wand::GraphicsDevice::ExecuteCommandLists
   // dispatches each command list in its own ExecuteCommandLists scope.
@@ -390,11 +390,16 @@ auto CommandList::GenerateBarrier(Buffer const& buf, D3D12_BARRIER_SYNC const sy
 
   // Read -> read requires no barrier for buffers.
   if (!prev_access_was_write && !this_access_is_write) {
-    local_resource_states_.Record(buf.GetInternalResource(), {
-      .accum_sync = local_state->accum_sync | sync,
-      .accum_access = local_state->accum_access | access,
-      .layout = D3D12_BARRIER_LAYOUT_UNDEFINED
-    });
+    auto const new_sync = local_state->accum_sync | sync;
+    auto const new_access = local_state->accum_access | access;
+
+    if (new_sync != local_state->accum_sync || new_access != local_state->accum_access) {
+      *local_state = {
+        .accum_sync = new_sync,
+        .accum_access = new_access,
+        .layout = D3D12_BARRIER_LAYOUT_UNDEFINED
+      };
+    }
     return;
   }
 
@@ -419,11 +424,11 @@ auto CommandList::GenerateBarrier(Buffer const& buf, D3D12_BARRIER_SYNC const sy
 
   cmd_list_->Barrier(1, &group);
 
-  local_resource_states_.Record(buf.GetInternalResource(), {
+  *local_state = {
     .accum_sync = sync,
     .accum_access = access,
     .layout = D3D12_BARRIER_LAYOUT_UNDEFINED
-  });
+  };
 }
 
 
