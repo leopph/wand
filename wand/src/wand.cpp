@@ -43,13 +43,15 @@ auto AsD3d12Desc(BufferDesc const& desc) -> D3D12_RESOURCE_DESC1 {
     flags |= D3D12_RESOURCE_FLAG_DENY_SHADER_RESOURCE;
   }
 
-  if (HasAny(desc.usage, BufferUsage::kUnorderedAccess)) {
+  if (HasAny(desc.usage,
+    BufferUsage::kUnorderedAccess |
+    BufferUsage::kAccelerationStructure |
+    BufferUsage::kAccelerationScratch)) {
     flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
   }
 
   if (HasAny(desc.usage, BufferUsage::kAccelerationStructure)) {
     flags |= D3D12_RESOURCE_FLAG_RAYTRACING_ACCELERATION_STRUCTURE;
-    flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
   }
 
   return CD3DX12_RESOURCE_DESC1::Buffer(desc.size, flags);
