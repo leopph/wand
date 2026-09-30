@@ -220,15 +220,20 @@ GraphicsDevice::GraphicsDevice(bool const enable_debug, bool const use_sw_render
 
 auto GraphicsDevice::CreateBuffer(BufferDesc const& desc,
                                   CpuAccess const cpu_access) -> SharedDeviceChildHandle<Buffer> {
+  // If the buffer needs to have both CPU and GPU write capabilities, it must be placed in a GPU upload heap.
+  // If GPU upload heaps are not supported, we cannot create such a buffer.
+  if (cpu_access == CpuAccess::kWrite && detail::IsGpuWritable(desc) && !supported_features_.GPUUploadHeapSupported()) {
+    throw std::runtime_error{
+      "Cannot create a buffer with both CPU and GPU write because GPU upload heaps are not supported."
+    };
+  }
+
   ComPtr<D3D12MA::Allocation> allocation;
   ComPtr<ID3D12Resource2> resource;
 
   D3D12MA::ALLOCATION_DESC const alloc_desc{
     D3D12MA::ALLOCATION_FLAG_NONE, MakeHeapType(cpu_access), D3D12_HEAP_FLAG_NONE, nullptr, nullptr
   };
-
-  // The gpu cannot write to the upload heap so this combination fails.
-  assert(alloc_desc.HeapType != D3D12_HEAP_TYPE_UPLOAD || detail::IsGpuWritable(desc));
 
   auto const res_desc{AsD3d12Desc(desc)};
 
