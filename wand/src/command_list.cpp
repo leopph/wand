@@ -3,9 +3,12 @@
 #include <algorithm>
 #include <array>
 #include <bit>
+#include <cassert>
 #include <iterator>
 
 #include "wand/common.hpp"
+#include "wand/flags.hpp"
+#include "wand/detail/buffer_helpers.hpp"
 #include "wand/platforms/detail/d3d12_internals.hpp"
 
 using Microsoft::WRL::ComPtr;
@@ -54,16 +57,24 @@ auto CommandList::ClearRenderTarget(Texture const& tex, std::span<FLOAT const, 4
 
 
 auto CommandList::CopyBuffer(Buffer const& dst, Buffer const& src) -> void {
+  assert(HasAny(src.GetDesc().usage, BufferUsage::kCopySource));
+  assert(HasAny(dst.GetDesc().usage, BufferUsage::kCopyDestination));
+
   GenerateBarrier(src, D3D12_BARRIER_SYNC_COPY, D3D12_BARRIER_ACCESS_COPY_SOURCE);
   GenerateBarrier(dst, D3D12_BARRIER_SYNC_COPY, D3D12_BARRIER_ACCESS_COPY_DEST);
+
   cmd_list_->CopyResource(dst.GetInternalResource(), src.GetInternalResource());
 }
 
 
 auto CommandList::CopyBufferRegion(Buffer const& dst, UINT64 const dst_offset, Buffer const& src,
                                    UINT64 const src_offset, UINT64 const num_bytes) -> void {
+  assert(HasAny(src.GetDesc().usage, BufferUsage::kCopySource));
+  assert(HasAny(dst.GetDesc().usage, BufferUsage::kCopyDestination));
+
   GenerateBarrier(src, D3D12_BARRIER_SYNC_COPY, D3D12_BARRIER_ACCESS_COPY_SOURCE);
   GenerateBarrier(dst, D3D12_BARRIER_SYNC_COPY, D3D12_BARRIER_ACCESS_COPY_DEST);
+
   cmd_list_->CopyBufferRegion(dst.GetInternalResource(), dst_offset, src.GetInternalResource(), src_offset, num_bytes);
 }
 
@@ -100,9 +111,12 @@ auto CommandList::CopyTextureRegion(Texture const& dst, UINT const dst_subresour
 auto CommandList::CopyTextureRegion(Texture const& dst, UINT const dst_subresource_index, UINT const dst_x,
                                     UINT const dst_y, UINT const dst_z, Buffer const& src,
                                     D3D12_PLACED_SUBRESOURCE_FOOTPRINT const& src_footprint) -> void {
+  assert(HasAny(src.GetDesc().usage, BufferUsage::kCopySource));
+
   GenerateBarrier(src, D3D12_BARRIER_SYNC_COPY, D3D12_BARRIER_ACCESS_COPY_SOURCE);
   GenerateBarrier(dst, D3D12_BARRIER_SYNC_COPY, D3D12_BARRIER_ACCESS_COPY_DEST,
     D3D12_BARRIER_LAYOUT_DIRECT_QUEUE_COPY_DEST);
+
   D3D12_TEXTURE_COPY_LOCATION const dst_loc{
     .pResource = dst.GetInternalResource(), .Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX,
     .SubresourceIndex = dst_subresource_index
@@ -179,7 +193,9 @@ auto CommandList::SetBlendFactor(std::span<FLOAT const, 4> const blend_factor) c
 
 
 auto CommandList::SetIndexBuffer(Buffer const& buf, DXGI_FORMAT const index_format) -> void {
+  assert(HasAny(buf.GetDesc().usage, BufferUsage::kIndexBuffer));
   GenerateBarrier(buf, D3D12_BARRIER_SYNC_INDEX_INPUT, D3D12_BARRIER_ACCESS_INDEX_BUFFER);
+
   D3D12_INDEX_BUFFER_VIEW const ibv{
     buf.GetInternalResource()->GetGPUVirtualAddress(), static_cast<UINT>(buf.GetInternalResource()->GetDesc1().Width),
     index_format
@@ -263,12 +279,14 @@ auto CommandList::SetPipelineParameters(UINT const index, std::span<UINT const> 
 
 
 auto CommandList::SetConstantBuffer(UINT const param_idx, Buffer const& buf) -> void {
+  assert(HasAny(buf.GetDesc().usage, BufferUsage::kConstantBuffer));
   GenerateBarrier(buf, D3D12_BARRIER_SYNC_ALL_SHADING, D3D12_BARRIER_ACCESS_CONSTANT_BUFFER);
   SetPipelineParameter(param_idx, buf.GetConstantBuffer());
 }
 
 
 auto CommandList::SetShaderResource(UINT const param_idx, Buffer const& buf) -> void {
+  assert(HasAny(buf.GetDesc().usage, BufferUsage::kShaderResource));
   GenerateBarrier(buf, D3D12_BARRIER_SYNC_ALL_SHADING, D3D12_BARRIER_ACCESS_SHADER_RESOURCE);
   SetPipelineParameter(param_idx, buf.GetShaderResource());
 }
@@ -282,6 +300,7 @@ auto CommandList::SetShaderResource(UINT const param_idx, Texture const& tex) ->
 
 
 auto CommandList::SetUnorderedAccess(UINT const param_idx, Buffer const& buf) -> void {
+  assert(HasAny(buf.GetDesc().usage, BufferUsage::kUnorderedAccess));
   GenerateBarrier(buf, D3D12_BARRIER_SYNC_ALL_SHADING, D3D12_BARRIER_ACCESS_UNORDERED_ACCESS);
   SetPipelineParameter(param_idx, buf.GetUnorderedAccess());
 }
@@ -329,13 +348,18 @@ auto CommandList::BuildRaytracingAccelerationStructure(
     });
 
   std::ranges::for_each(descs, [this](BuildRaytracingAccelerationStructureDesc const& desc) {
+    assert(HasAny(desc.dst_as->GetDesc().usage, BufferUsage::kAccelerationStructure));
     GenerateBarrier(*desc.dst_as, D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
       D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_WRITE);
+
     if (desc.src_as) {
+      assert(HasAny(desc.src_as->GetDesc().usage, BufferUsage::kAccelerationStructure));
       GenerateBarrier(*desc.src_as, D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
         D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_READ);
     }
+
     if (desc.scratch_buffer) {
+      assert(HasAny(desc.scratch_buffer->GetDesc().usage, BufferUsage::kAccelerationScratch));
       GenerateBarrier(*desc.scratch_buffer, D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
         D3D12_BARRIER_ACCESS_UNORDERED_ACCESS);
     }
@@ -369,6 +393,12 @@ CommandList::CommandList(ComPtr<ID3D12CommandAllocator> allocator, ComPtr<ID3D12
 
 auto CommandList::GenerateBarrier(Buffer const& buf, D3D12_BARRIER_SYNC const sync,
                                   D3D12_BARRIER_ACCESS const access) -> void {
+  // Read operations don't need syncing, there's no writes to be made visible,
+  // and buffers have no layout, so there's nothing to generate a barrier for.
+  if (!detail::IsGpuWritable(buf.GetDesc())) {
+    return;
+  }
+
   auto* const local_state{local_resource_states_.Get(buf.GetInternalResource())};
 
   // This builds heavily on the fact that wand::GraphicsDevice::ExecuteCommandLists
@@ -472,7 +502,7 @@ auto CommandList::GenerateBarrier(Texture const& tex, D3D12_BARRIER_SYNC const s
     return;
   }
 
-    D3D12_TEXTURE_BARRIER const barrier{
+  D3D12_TEXTURE_BARRIER const barrier{
     .SyncBefore = local_state->accum_sync,
     .SyncAfter = sync,
     .AccessBefore = local_state->accum_access,
@@ -481,9 +511,9 @@ auto CommandList::GenerateBarrier(Texture const& tex, D3D12_BARRIER_SYNC const s
     .LayoutAfter = layout,
     .pResource = tex.GetInternalResource(),
     .Subresources = {
-        .IndexOrFirstMipLevel = 0xffffffff, .NumMipLevels = 0, .FirstArraySlice = 0, .NumArraySlices = 0,
-        .FirstPlane = 0, .NumPlanes = 0
-      },
+      .IndexOrFirstMipLevel = 0xffffffff, .NumMipLevels = 0, .FirstArraySlice = 0, .NumArraySlices = 0,
+      .FirstPlane = 0, .NumPlanes = 0
+    },
     .Flags = D3D12_TEXTURE_BARRIER_FLAG_NONE
   };
 
@@ -491,14 +521,14 @@ auto CommandList::GenerateBarrier(Texture const& tex, D3D12_BARRIER_SYNC const s
     .Type = D3D12_BARRIER_TYPE_TEXTURE,
     .NumBarriers = 1,
     .pTextureBarriers = &barrier
-    };
+  };
 
-    cmd_list_->Barrier(1, &group);
+  cmd_list_->Barrier(1, &group);
 
   *local_state = {
     .accum_sync = sync,
     .accum_access = access,
-      .layout = layout
+    .layout = layout
   };
 }
 }

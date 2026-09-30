@@ -1,10 +1,9 @@
 #include "wand/wand.hpp"
 
-#include <dxgidebug.h>
-
 #include <algorithm>
 #include <array>
 #include <bit>
+#include <cassert>
 #include <cmath>
 #include <iterator>
 #include <stdexcept>
@@ -12,8 +11,12 @@
 #include <utility>
 #include <vector>
 
+#include <dxgidebug.h>
+
+#include "wand/flags.hpp"
 #include "wand/format.hpp"
 #include "wand/util.hpp"
+#include "wand/detail/buffer_helpers.hpp"
 
 using Microsoft::WRL::ComPtr;
 
@@ -36,15 +39,15 @@ namespace {
 auto AsD3d12Desc(BufferDesc const& desc) -> D3D12_RESOURCE_DESC1 {
   auto flags{D3D12_RESOURCE_FLAG_NONE};
 
-  if (!desc.shader_resource) {
+  if (!HasAny(desc.usage, BufferUsage::kShaderResource)) {
     flags |= D3D12_RESOURCE_FLAG_DENY_SHADER_RESOURCE;
   }
 
-  if (desc.unordered_access) {
+  if (HasAny(desc.usage, BufferUsage::kUnorderedAccess)) {
     flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
   }
 
-  if (desc.acceleration_structure) {
+  if (HasAny(desc.usage, BufferUsage::kAccelerationStructure)) {
     flags |= D3D12_RESOURCE_FLAG_RAYTRACING_ACCELERATION_STRUCTURE;
     flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
   }
@@ -223,6 +226,9 @@ auto GraphicsDevice::CreateBuffer(BufferDesc const& desc,
   D3D12MA::ALLOCATION_DESC const alloc_desc{
     D3D12MA::ALLOCATION_FLAG_NONE, MakeHeapType(cpu_access), D3D12_HEAP_FLAG_NONE, nullptr, nullptr
   };
+
+  // The gpu cannot write to the upload heap so this combination fails.
+  assert(alloc_desc.HeapType != D3D12_HEAP_TYPE_UPLOAD || detail::IsGpuWritable(desc));
 
   auto const res_desc{AsD3d12Desc(desc)};
 
@@ -823,7 +829,7 @@ auto GraphicsDevice::SwapChainCreateTextures(SwapChain& swap_chain) -> void {
 
 auto GraphicsDevice::CreateBufferViews(ID3D12Resource2& buffer, BufferDesc const& desc, UINT& cbv, UINT& srv,
                                        UINT& uav) const -> void {
-  if (desc.constant_buffer) {
+  if (HasAny(desc.usage, BufferUsage::kConstantBuffer)) {
     cbv = res_desc_heap_->Allocate();
     D3D12_CONSTANT_BUFFER_VIEW_DESC const cbv_desc{buffer.GetGPUVirtualAddress(), static_cast<UINT>(desc.size)};
     device_->CreateConstantBufferView(&cbv_desc, res_desc_heap_->GetDescriptorCpuHandle(cbv));
@@ -831,36 +837,40 @@ auto GraphicsDevice::CreateBufferViews(ID3D12Resource2& buffer, BufferDesc const
     cbv = kInvalidResourceIndex;
   }
 
-  if (desc.shader_resource) {
+  // Both shader resource and acceleration structure uses the the srv descriptor so can't support both.
+  // Also, would that be a good idea to view an AS as an SRV? Maybe not.
+  assert(!HasAll(desc.usage, BufferUsage::kShaderResource | BufferUsage::kAccelerationStructure));
+
+  if (HasAny(desc.usage, BufferUsage::kShaderResource)) {
     srv = res_desc_heap_->Allocate();
 
-    if (desc.acceleration_structure) {
-      D3D12_SHADER_RESOURCE_VIEW_DESC const srv_desc{
-        .Format = DXGI_FORMAT_UNKNOWN,
-        .ViewDimension = D3D12_SRV_DIMENSION_RAYTRACING_ACCELERATION_STRUCTURE,
-        .Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING,
-        .RaytracingAccelerationStructure = {
-          .Location = buffer.GetGPUVirtualAddress()
-        }
-      };
-      device_->CreateShaderResourceView(nullptr, &srv_desc, res_desc_heap_->GetDescriptorCpuHandle(srv));
-    } else {
-      D3D12_SHADER_RESOURCE_VIEW_DESC const srv_desc{
-        .Format = desc.stride == 1 ? DXGI_FORMAT_R32_TYPELESS : DXGI_FORMAT_UNKNOWN,
-        .ViewDimension = D3D12_SRV_DIMENSION_BUFFER,
-        .Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING,
-        .Buffer = {
-          0, static_cast<UINT>(desc.size / (desc.stride == 1 ? 4 : desc.stride)), desc.stride == 1 ? 0 : desc.stride,
-          desc.stride == 1 ? D3D12_BUFFER_SRV_FLAG_RAW : D3D12_BUFFER_SRV_FLAG_NONE
-        }
-      };
-      device_->CreateShaderResourceView(&buffer, &srv_desc, res_desc_heap_->GetDescriptorCpuHandle(srv));
-    }
+    D3D12_SHADER_RESOURCE_VIEW_DESC const srv_desc{
+      .Format = desc.stride == 1 ? DXGI_FORMAT_R32_TYPELESS : DXGI_FORMAT_UNKNOWN,
+      .ViewDimension = D3D12_SRV_DIMENSION_BUFFER,
+      .Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING,
+      .Buffer = {
+        0, static_cast<UINT>(desc.size / (desc.stride == 1 ? 4 : desc.stride)), desc.stride == 1 ? 0 : desc.stride,
+        desc.stride == 1 ? D3D12_BUFFER_SRV_FLAG_RAW : D3D12_BUFFER_SRV_FLAG_NONE
+      }
+    };
+    device_->CreateShaderResourceView(&buffer, &srv_desc, res_desc_heap_->GetDescriptorCpuHandle(srv));
+  } else if (HasAny(desc.usage, BufferUsage::kAccelerationStructure)) {
+    srv = res_desc_heap_->Allocate();
+
+    D3D12_SHADER_RESOURCE_VIEW_DESC const srv_desc{
+      .Format = DXGI_FORMAT_UNKNOWN,
+      .ViewDimension = D3D12_SRV_DIMENSION_RAYTRACING_ACCELERATION_STRUCTURE,
+      .Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING,
+      .RaytracingAccelerationStructure = {
+        .Location = buffer.GetGPUVirtualAddress()
+      }
+    };
+    device_->CreateShaderResourceView(nullptr, &srv_desc, res_desc_heap_->GetDescriptorCpuHandle(srv));
   } else {
     srv = kInvalidResourceIndex;
   }
 
-  if (desc.unordered_access) {
+  if (HasAny(desc.usage, BufferUsage::kUnorderedAccess)) {
     uav = res_desc_heap_->Allocate();
     D3D12_UNORDERED_ACCESS_VIEW_DESC const uav_desc{
       .Format = desc.stride == 1 ? DXGI_FORMAT_R32_TYPELESS : DXGI_FORMAT_UNKNOWN,

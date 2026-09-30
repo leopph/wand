@@ -66,6 +66,9 @@
     <ClCompile Include="src\platforms\detail\d3d12_internals.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="src\detail\buffer_helpers.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\wand\wand.hpp">
@@ -131,6 +134,12 @@
     <ClInclude Include="include\wand\platforms\detail\d3d12_internals.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="include\wand\flags.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\wand\detail\buffer_helpers.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
@@ -138,6 +147,9 @@
       <Filter>Header Files</Filter>
     </None>
     <None Include="include\wand\detail\resource_state_tracker.inl">
+      <Filter>Header Files</Filter>
+    </None>
+    <None Include="include\wand\flags.inl">
       <Filter>Header Files</Filter>
     </None>
   </ItemGroup>
