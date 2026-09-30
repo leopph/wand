@@ -436,14 +436,21 @@ auto CommandList::GenerateBarrier(Texture const& tex, D3D12_BARRIER_SYNC const s
                                   D3D12_BARRIER_LAYOUT const layout) -> void {
   auto const local_state{local_resource_states_.Get(tex.GetInternalResource())};
 
-  // If we haven't encountered this texture on this command list since its reset,
-  // we will need a barrier to transition it from its state it was left in at the end of the last command list that used it.
-  // We can only resolve this at submit time, so we record this "pending" barrier.
+  // This builds heavily on the fact that wand::GraphicsDevice::ExecuteCommandLists
+  // dispatches each command list in its own ExecuteCommandLists scope.
+  // This way the first use of a texture on a command list is guaranteed to also be
+  // the first use in the scope. This is important because the D3D12 Enhanced Barriers
+  // spec allows the first use of a texture in an ECL scope to be barrier-free provided
+  // it's in a compatible layout and its compression metadata (if applicable) is initialized.
+  // To guarantee layout compatibility, we'll transition the texture to the layout we need at submit time.
+  // This is recorded as a pending barrier.
   if (!local_state) {
     pending_barriers_.emplace_back(layout, tex.GetInternalResource());
+    local_resource_states_.Record(tex.GetInternalResource(), {
+      .accum_sync = sync, .accum_access = access, .layout = layout
+    });
+    return;
   }
-
-  // If the texture has already been used on this command list, we can decide whether we need a barrier.
 
   auto const needs_barrier{
     local_state && (
@@ -456,38 +463,42 @@ auto CommandList::GenerateBarrier(Texture const& tex, D3D12_BARRIER_SYNC const s
     )
   };
 
-  // We need to record the new state. If
-  // 1. this is the first use of the resource
-  // 2. we're placing a barrier
-  // We need to record this exact state we (or the pending barrier) will put the resource in.
-  if (!local_state || needs_barrier) {
-    local_resource_states_.Record(tex.GetInternalResource(), {
-      .accum_sync = sync, .accum_access = access, .layout = layout
-    });
-  }
-
-  // Place the barrier if needed
-  if (needs_barrier) {
-    D3D12_TEXTURE_BARRIER const barrier{
-      local_state->accum_sync, sync, local_state->accum_access, access, local_state->layout, layout,
-      tex.GetInternalResource(), {
-        .IndexOrFirstMipLevel = 0xffffffff, .NumMipLevels = 0, .FirstArraySlice = 0, .NumArraySlices = 0,
-        .FirstPlane = 0, .NumPlanes = 0
-      },
-      D3D12_TEXTURE_BARRIER_FLAG_NONE
-    };
-    D3D12_BARRIER_GROUP const group{.Type = D3D12_BARRIER_TYPE_TEXTURE, .NumBarriers = 1, .pTextureBarriers = &barrier};
-    cmd_list_->Barrier(1, &group);
-    return;
-  }
-
-  // Otherwise, if not first use, accumulate the access and sync flags
-  if (local_state) {
-    local_resource_states_.Record(tex.GetInternalResource(), {
+  if (!needs_barrier) {
+    *local_state = {
       .accum_sync = local_state->accum_sync | sync,
       .accum_access = local_state->accum_access | access,
       .layout = layout
-    });
+    };
+    return;
   }
+
+    D3D12_TEXTURE_BARRIER const barrier{
+    .SyncBefore = local_state->accum_sync,
+    .SyncAfter = sync,
+    .AccessBefore = local_state->accum_access,
+    .AccessAfter = access,
+    .LayoutBefore = local_state->layout,
+    .LayoutAfter = layout,
+    .pResource = tex.GetInternalResource(),
+    .Subresources = {
+        .IndexOrFirstMipLevel = 0xffffffff, .NumMipLevels = 0, .FirstArraySlice = 0, .NumArraySlices = 0,
+        .FirstPlane = 0, .NumPlanes = 0
+      },
+    .Flags = D3D12_TEXTURE_BARRIER_FLAG_NONE
+  };
+
+  D3D12_BARRIER_GROUP const group{
+    .Type = D3D12_BARRIER_TYPE_TEXTURE,
+    .NumBarriers = 1,
+    .pTextureBarriers = &barrier
+    };
+
+    cmd_list_->Barrier(1, &group);
+
+  *local_state = {
+    .accum_sync = sync,
+    .accum_access = access,
+      .layout = layout
+  };
 }
 }
