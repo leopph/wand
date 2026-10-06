@@ -17,6 +17,7 @@
 #include "wand/format.hpp"
 #include "wand/util.hpp"
 #include "wand/detail/buffer_helpers.hpp"
+#include "wand/platforms/detail/d3d12_internals.hpp"
 
 using Microsoft::WRL::ComPtr;
 
@@ -1181,9 +1182,10 @@ auto GraphicsDevice::GetOrCreateRootSignature(
 
   if (!root_signature) {
     std::array<CD3DX12_ROOT_PARAMETER1, 2> root_params;
-    root_params[0].InitAsConstants(num_32_bit_params, 0, 0, D3D12_SHADER_VISIBILITY_ALL);
     // 2 params: base vertex and base instance. Make sure this aligns with the shader code!
-    root_params[1].InitAsConstants(2, 1, 0, D3D12_SHADER_VISIBILITY_VERTEX);
+    root_params[d3d12::detail::kDrawCallParamsRootIdx].InitAsConstants(2, 1, 0, D3D12_SHADER_VISIBILITY_VERTEX);
+    root_params[d3d12::detail::kDrawParamsRootIdx].
+      InitAsConstants(num_32_bit_params, 0, 0, D3D12_SHADER_VISIBILITY_ALL);
 
     D3D12_VERSIONED_ROOT_SIGNATURE_DESC const root_signature_desc{
       .Version = D3D_ROOT_SIGNATURE_VERSION_1_1,

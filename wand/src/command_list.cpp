@@ -164,7 +164,8 @@ auto CommandList::DrawIndexedInstanced(UINT const index_count_per_instance, UINT
                                        UINT const start_index_location, INT const base_vertex_location,
                                        UINT const start_instance_location) const -> void {
   std::array const offsets{*std::bit_cast<UINT const*>(&base_vertex_location), start_instance_location};
-  cmd_list_->SetGraphicsRoot32BitConstants(1, static_cast<UINT>(offsets.size()), offsets.data(), 0);
+  cmd_list_->SetGraphicsRoot32BitConstants(d3d12::detail::kDrawCallParamsRootIdx, static_cast<UINT>(offsets.size()),
+    offsets.data(), 0);
   cmd_list_->DrawIndexedInstanced(index_count_per_instance, instance_count, start_index_location, base_vertex_location,
     start_instance_location);
 }
@@ -173,7 +174,8 @@ auto CommandList::DrawIndexedInstanced(UINT const index_count_per_instance, UINT
 auto CommandList::DrawInstanced(UINT const vertex_count_per_instance, UINT const instance_count,
                                 UINT const start_vertex_location, UINT const start_instance_location) const -> void {
   std::array const offsets{0u, start_instance_location};
-  cmd_list_->SetGraphicsRoot32BitConstants(1, static_cast<UINT>(offsets.size()), offsets.data(), 0);
+  cmd_list_->SetGraphicsRoot32BitConstants(d3d12::detail::kDrawCallParamsRootIdx, static_cast<UINT>(offsets.size()),
+    offsets.data(), 0);
   cmd_list_->DrawInstanced(vertex_count_per_instance, instance_count, start_vertex_location, start_instance_location);
 }
 
@@ -262,18 +264,20 @@ auto CommandList::SetViewports(std::span<D3D12_VIEWPORT const> const viewports) 
 
 auto CommandList::SetPipelineParameter(UINT const index, UINT const value) const -> void {
   if (compute_pipeline_set_) {
-    cmd_list_->SetComputeRoot32BitConstant(0, value, index);
+    cmd_list_->SetComputeRoot32BitConstant(d3d12::detail::kDrawParamsRootIdx, value, index);
   } else {
-    cmd_list_->SetGraphicsRoot32BitConstant(0, value, index);
+    cmd_list_->SetGraphicsRoot32BitConstant(d3d12::detail::kDrawParamsRootIdx, value, index);
   }
 }
 
 
 auto CommandList::SetPipelineParameters(UINT const index, std::span<UINT const> const values) const -> void {
   if (compute_pipeline_set_) {
-    cmd_list_->SetComputeRoot32BitConstants(0, static_cast<UINT>(values.size()), values.data(), index);
+    cmd_list_->SetComputeRoot32BitConstants(d3d12::detail::kDrawParamsRootIdx, static_cast<UINT>(values.size()),
+      values.data(), index);
   } else {
-    cmd_list_->SetGraphicsRoot32BitConstants(0, static_cast<UINT>(values.size()), values.data(), index);
+    cmd_list_->SetGraphicsRoot32BitConstants(d3d12::detail::kDrawParamsRootIdx, static_cast<UINT>(values.size()),
+      values.data(), index);
   }
 }
 
