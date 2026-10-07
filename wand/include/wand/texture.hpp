@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 
 #include <wand/resource.hpp>
 #include <wand/wandapi.hpp>
@@ -48,6 +49,12 @@ public:
   auto Unmap(UINT subresource) const -> void;
 
   [[nodiscard]] WANDAPI
+  auto GetShaderResource() const -> UINT;
+
+  [[nodiscard]] WANDAPI
+  auto GetUnorderedAccess() const -> UINT;
+
+  [[nodiscard]] WANDAPI
   auto GetDepthStencilView(UINT mip_index) const -> UINT;
 
   [[nodiscard]] WANDAPI
@@ -59,6 +66,8 @@ private:
           TextureDesc const& desc);
 
   TextureDesc desc_;
+  std::optional<UINT> srv_;
+  std::optional<UINT> uav_;
   // One per mip
   std::vector<UINT> dsvs_;
   // One per mip

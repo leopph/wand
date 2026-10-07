@@ -4,6 +4,7 @@
 
 using Microsoft::WRL::ComPtr;
 
+
 namespace wand {
 auto Resource::SetDebugName(std::wstring_view const name) const -> void {
   ThrowIfFailed(resource_->SetName(name.data()), "Failed to set D3D12 resource debug name.");
@@ -20,28 +21,14 @@ auto Resource::Unmap() const -> void {
 }
 
 
-auto Resource::GetShaderResource() const -> UINT {
-  return srv_.value();
-}
-
-
-auto Resource::GetUnorderedAccess() const -> UINT {
-  return uav_.value();
-}
-
-
 auto Resource::GetInternalResource() const -> ID3D12Resource2* {
   return resource_.Get();
 }
 
 
-Resource::Resource(ComPtr<D3D12MA::Allocation> allocation, ComPtr<ID3D12Resource2> resource,
-                   std::optional<UINT> const srv, std::optional<UINT> const uav) :
+Resource::Resource(ComPtr<D3D12MA::Allocation> allocation, ComPtr<ID3D12Resource2> resource) :
   allocation_{std::move(allocation)},
-  resource_{std::move(resource)},
-  srv_{srv},
-  uav_{uav} {
-}
+  resource_{std::move(resource)} {}
 
 
 auto Resource::InternalMap(UINT const subresource, D3D12_RANGE const* read_range) const -> void* {

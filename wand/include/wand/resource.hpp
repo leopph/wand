@@ -1,6 +1,5 @@
 #pragma once
 
-#include <optional>
 #include <string_view>
 
 #include <wand/wandapi.hpp>
@@ -23,17 +22,10 @@ public:
   auto Unmap() const -> void;
 
   [[nodiscard]] WANDAPI
-  auto GetShaderResource() const -> UINT;
-
-  [[nodiscard]] WANDAPI
-  auto GetUnorderedAccess() const -> UINT;
-
-  [[nodiscard]] WANDAPI
   auto GetInternalResource() const -> ID3D12Resource2*;
 
 protected:
-  Resource(Microsoft::WRL::ComPtr<D3D12MA::Allocation> allocation, Microsoft::WRL::ComPtr<ID3D12Resource2> resource,
-           std::optional<UINT> srv, std::optional<UINT> uav);
+  Resource(Microsoft::WRL::ComPtr<D3D12MA::Allocation> allocation, Microsoft::WRL::ComPtr<ID3D12Resource2> resource);
 
   [[nodiscard]] auto InternalMap(UINT subresource, D3D12_RANGE const* read_range) const -> void*;
   auto InternalUnmap(UINT subresource, D3D12_RANGE const* written_range) const -> void;
@@ -41,9 +33,6 @@ protected:
 private:
   Microsoft::WRL::ComPtr<D3D12MA::Allocation> allocation_;
   Microsoft::WRL::ComPtr<ID3D12Resource2> resource_;
-
-  std::optional<UINT> srv_;
-  std::optional<UINT> uav_;
 
   friend GraphicsDevice;
 };

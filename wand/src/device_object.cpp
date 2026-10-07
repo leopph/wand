@@ -1,16 +1,16 @@
-#include "wand/device_child.hpp"
+#include "wand/device_object.hpp"
 
 #include "wand/wand.hpp"
 
+
 namespace wand {
-template<DeviceChild T>
-DeviceChildDeleter<T>::DeviceChildDeleter(GraphicsDevice& device) :
-  device_{&device} {
-}
+template<DeviceObject T>
+DeviceObjectDeleter<T>::DeviceObjectDeleter(GraphicsDevice& device) :
+  device_{&device} {}
 
 
-template<DeviceChild T>
-auto DeviceChildDeleter<T>::operator()(T const* device_child) -> void {
+template<DeviceObject T>
+auto DeviceObjectDeleter<T>::operator()(T const* device_child) -> void {
   if (device_) {
     if constexpr (std::same_as<T, Buffer>) {
       device_->DestroyBuffer(device_child);
@@ -26,15 +26,19 @@ auto DeviceChildDeleter<T>::operator()(T const* device_child) -> void {
       device_->DestroyFence(device_child);
     } else if constexpr (std::same_as<T, SwapChain>) {
       device_->DestroySwapChain(device_child);
+    } else if constexpr (std::same_as<T, BufferView>) {
+      device_->DestroyBufferView(device_child);
     }
   }
 }
 
-template class DeviceChildDeleter<Buffer>;
-template class DeviceChildDeleter<Texture>;
-template class DeviceChildDeleter<PipelineState>;
-template class DeviceChildDeleter<RtStateObject>;
-template class DeviceChildDeleter<CommandList>;
-template class DeviceChildDeleter<Fence>;
-template class DeviceChildDeleter<SwapChain>;
+
+template class DeviceObjectDeleter<Buffer>;
+template class DeviceObjectDeleter<Texture>;
+template class DeviceObjectDeleter<PipelineState>;
+template class DeviceObjectDeleter<RtStateObject>;
+template class DeviceObjectDeleter<CommandList>;
+template class DeviceObjectDeleter<Fence>;
+template class DeviceObjectDeleter<SwapChain>;
+template class DeviceObjectDeleter<BufferView>;
 }

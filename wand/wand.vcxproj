@@ -102,13 +102,14 @@
       <WarningLevel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">TurnOffAllWarnings</WarningLevel>
       <WarningLevel Condition="'$(Configuration)|$(Platform)'=='Release|x64'">TurnOffAllWarnings</WarningLevel>
     </ClCompile>
+    <ClCompile Include="src\buffer_view.cpp" />
     <ClCompile Include="src\detail\buffer_helpers.cpp" />
     <ClCompile Include="src\platforms\detail\d3d12_internals.cpp" />
     <ClCompile Include="src\buffer.cpp" />
     <ClCompile Include="src\command_list.cpp" />
     <ClCompile Include="src\common.cpp" />
     <ClCompile Include="src\detail\descriptor_heap.cpp" />
-    <ClCompile Include="src\device_child.cpp" />
+    <ClCompile Include="src\device_object.cpp" />
     <ClCompile Include="src\fence.cpp" />
     <ClCompile Include="src\format.cpp" />
     <ClCompile Include="src\pipeline.cpp" />
@@ -123,13 +124,14 @@
   <ItemGroup>
     <ClInclude Include="include\wand\barrier.hpp" />
     <ClInclude Include="include\wand\buffer.hpp" />
+    <ClInclude Include="include\wand\buffer_view.hpp" />
     <ClInclude Include="include\wand\command_list.hpp" />
     <ClInclude Include="include\wand\common.hpp" />
     <ClInclude Include="include\wand\detail\buffer_helpers.hpp" />
     <ClInclude Include="include\wand\flags.hpp" />
     <ClInclude Include="include\wand\platforms\detail\d3d12_internals.hpp" />
     <ClInclude Include="include\wand\detail\descriptor_heap.hpp" />
-    <ClInclude Include="include\wand\device_child.hpp" />
+    <ClInclude Include="include\wand\device_object.hpp" />
     <ClInclude Include="include\wand\fence.hpp" />
     <ClInclude Include="include\wand\format.hpp" />
     <ClInclude Include="include\wand\pipeline.hpp" />

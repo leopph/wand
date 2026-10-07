@@ -5,7 +5,9 @@
 #include <bit>
 #include <cassert>
 #include <cmath>
+#include <format>
 #include <iterator>
+#include <limits>
 #include <stdexcept>
 #include <string_view>
 #include <utility>
@@ -222,7 +224,7 @@ GraphicsDevice::GraphicsDevice(bool const enable_debug, bool const use_sw_render
 
 
 auto GraphicsDevice::CreateBuffer(BufferDesc const& desc,
-                                  CpuAccess const cpu_access) -> SharedDeviceChildHandle<Buffer> {
+                                  CpuAccess const cpu_access) -> SharedDeviceHandle<Buffer> {
   // If the buffer needs to have both CPU and GPU write capabilities, it must be placed in a GPU upload heap.
   // If GPU upload heaps are not supported, we cannot create such a buffer.
   if (cpu_access == CpuAccess::kWrite && detail::IsGpuWritable(desc) && !supported_features_.GPUUploadHeapSupported()) {
@@ -243,27 +245,24 @@ auto GraphicsDevice::CreateBuffer(BufferDesc const& desc,
   ThrowIfFailed(allocator_->CreateResource3(&alloc_desc, &res_desc, D3D12_BARRIER_LAYOUT_UNDEFINED, nullptr, 0, nullptr,
     &allocation, IID_PPV_ARGS(&resource)), "Failed to create buffer.");
 
-  UINT cbv;
-  UINT srv;
-  UINT uav;
-
-  CreateBufferViews(*resource.Get(), desc, cbv, srv, uav);
+  std::optional<UINT> as;
+  CreateAccelerationStructure(*resource.Get(), desc, as);
 
   {
     std::scoped_lock const lck{state_tracker_mutex_};
     global_resource_states_.Record(resource.Get(), {.layout = D3D12_BARRIER_LAYOUT_UNDEFINED});
   }
 
-  return SharedDeviceChildHandle<Buffer>{
-    new Buffer{std::move(allocation), std::move(resource), cbv, srv, uav, desc},
-    DeviceChildDeleter<Buffer>{*this}
+  return SharedDeviceHandle<Buffer>{
+    new Buffer{std::move(allocation), std::move(resource), as, desc},
+    DeviceObjectDeleter<Buffer>{*this}
   };
 }
 
 
 auto GraphicsDevice::CreateTexture(TextureDesc const& desc,
                                    CpuAccess const cpu_access,
-                                   D3D12_CLEAR_VALUE const* clear_value) -> SharedDeviceChildHandle<Texture> {
+                                   D3D12_CLEAR_VALUE const* clear_value) -> SharedDeviceHandle<Texture> {
   ComPtr<D3D12MA::Allocation> allocation;
   ComPtr<ID3D12Resource2> resource;
 
@@ -293,15 +292,15 @@ auto GraphicsDevice::CreateTexture(TextureDesc const& desc,
     global_resource_states_.Record(resource.Get(), {.layout = initial_layout});
   }
 
-  return SharedDeviceChildHandle<Texture>{
+  return SharedDeviceHandle<Texture>{
     new Texture{std::move(allocation), std::move(resource), std::move(dsvs), std::move(rtvs), srv, uav, desc},
-    DeviceChildDeleter<Texture>{*this}
+    DeviceObjectDeleter<Texture>{*this}
   };
 }
 
 
 auto GraphicsDevice::CreatePipelineState(PipelineDesc const& desc,
-                                         std::uint8_t const num_32_bit_params) -> SharedDeviceChildHandle<
+                                         std::uint8_t const num_32_bit_params) -> SharedDeviceHandle<
   PipelineState> {
   auto root_signature = GetOrCreateRootSignature(num_32_bit_params);
 
@@ -334,18 +333,18 @@ auto GraphicsDevice::CreatePipelineState(PipelineDesc const& desc,
   ThrowIfFailed(device_->CreatePipelineState(&stream_desc, IID_PPV_ARGS(&pipeline_state)),
     "Failed to create pipeline state.");
 
-  return SharedDeviceChildHandle<PipelineState>{
+  return SharedDeviceHandle<PipelineState>{
     new PipelineState{
       std::move(root_signature), std::move(pipeline_state), num_32_bit_params, desc.cs.BytecodeLength != 0,
       desc.depth_stencil_state.DepthEnable && desc.depth_stencil_state.DepthWriteMask != D3D12_DEPTH_WRITE_MASK_ZERO
     },
-    DeviceChildDeleter<PipelineState>{*this}
+    DeviceObjectDeleter<PipelineState>{*this}
   };
 }
 
 
 auto GraphicsDevice::CreateRtStateObject(RtStateObjectDesc& desc,
-                                         std::uint8_t const num_32_bit_params) -> SharedDeviceChildHandle<
+                                         std::uint8_t const num_32_bit_params) -> SharedDeviceHandle<
   RtStateObject> {
   auto root_signature = GetOrCreateRootSignature(num_32_bit_params);
   auto* const global_root_sig_desc = desc.desc_.CreateSubobject<CD3DX12_GLOBAL_ROOT_SIGNATURE_SUBOBJECT>();
@@ -358,14 +357,14 @@ auto GraphicsDevice::CreateRtStateObject(RtStateObjectDesc& desc,
   ComPtr<ID3D12StateObjectProperties> props;
   ThrowIfFailed(state_object.As(&props), "Failed to query RT state object properties.");
 
-  return SharedDeviceChildHandle<RtStateObject>{
+  return SharedDeviceHandle<RtStateObject>{
     new RtStateObject{std::move(root_signature), std::move(state_object), std::move(props), num_32_bit_params},
-    DeviceChildDeleter<RtStateObject>{*this}
+    DeviceObjectDeleter<RtStateObject>{*this}
   };
 }
 
 
-auto GraphicsDevice::CreateCommandList() -> SharedDeviceChildHandle<CommandList> {
+auto GraphicsDevice::CreateCommandList() -> SharedDeviceHandle<CommandList> {
   ComPtr<ID3D12CommandAllocator> allocator;
   ThrowIfFailed(device_->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&allocator)),
     "Failed to create command allocator.");
@@ -375,28 +374,28 @@ auto GraphicsDevice::CreateCommandList() -> SharedDeviceChildHandle<CommandList>
     device_->CreateCommandList1(0, D3D12_COMMAND_LIST_TYPE_DIRECT, D3D12_COMMAND_LIST_FLAG_NONE,
       IID_PPV_ARGS(&cmd_list)), "Failed to create command list.");
 
-  return SharedDeviceChildHandle<CommandList>{
+  return SharedDeviceHandle<CommandList>{
     new CommandList{
       std::move(allocator), std::move(cmd_list), dsv_heap_.get(), rtv_heap_.get(), res_desc_heap_.get(),
       sampler_heap_.get(), &root_signatures_
     },
-    DeviceChildDeleter<CommandList>{*this}
+    DeviceObjectDeleter<CommandList>{*this}
   };
 }
 
 
-auto GraphicsDevice::CreateFence(UINT64 const initial_value) -> SharedDeviceChildHandle<Fence> {
+auto GraphicsDevice::CreateFence(UINT64 const initial_value) -> SharedDeviceHandle<Fence> {
   ComPtr<ID3D12Fence1> fence;
   ThrowIfFailed(device_->CreateFence(initial_value, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence)),
     "Failed to create fence.");
-  return SharedDeviceChildHandle<Fence>{
-    new Fence{std::move(fence), initial_value + 1}, DeviceChildDeleter<Fence>{*this}
+  return SharedDeviceHandle<Fence>{
+    new Fence{std::move(fence), initial_value + 1}, DeviceObjectDeleter<Fence>{*this}
   };
 }
 
 
 auto GraphicsDevice::CreateSwapChain(SwapChainDesc const& desc,
-                                     HWND const window_handle) -> SharedDeviceChildHandle<SwapChain> {
+                                     HWND const window_handle) -> SharedDeviceHandle<SwapChain> {
   DXGI_SWAP_CHAIN_DESC1 const dxgi_desc{
     desc.width, desc.height, desc.format, FALSE, {1, 0}, desc.usage, desc.buffer_count, desc.scaling,
     DXGI_SWAP_EFFECT_FLIP_DISCARD, DXGI_ALPHA_MODE_UNSPECIFIED, swap_chain_flags_
@@ -415,7 +414,7 @@ auto GraphicsDevice::CreateSwapChain(SwapChainDesc const& desc,
   auto const swap_chain{new SwapChain{std::move(swap_chain4), present_flags_}};
   SwapChainCreateTextures(*swap_chain);
 
-  return SharedDeviceChildHandle<SwapChain>{swap_chain, DeviceChildDeleter<SwapChain>{*this}};
+  return SharedDeviceHandle<SwapChain>{swap_chain, DeviceObjectDeleter<SwapChain>{*this}};
 }
 
 
@@ -429,8 +428,8 @@ auto GraphicsDevice::CreateSampler(D3D12_SAMPLER_DESC const& desc) -> UniqueSamp
 auto GraphicsDevice::CreateAliasingResources(std::span<BufferDesc const> const buffer_descs,
                                              std::span<AliasedTextureCreateInfo const> const texture_infos,
                                              CpuAccess cpu_access,
-                                             std::vector<SharedDeviceChildHandle<Buffer>>* buffers,
-                                             std::vector<SharedDeviceChildHandle<Texture>>* textures) -> void {
+                                             std::vector<SharedDeviceHandle<Buffer>>* buffers,
+                                             std::vector<SharedDeviceHandle<Texture>>* textures) -> void {
   D3D12_RESOURCE_ALLOCATION_INFO buf_alloc_info{0, 0};
   D3D12_RESOURCE_ALLOCATION_INFO rt_ds_alloc_info{0, 0};
   D3D12_RESOURCE_ALLOCATION_INFO non_rt_ds_alloc_info{0, 0};
@@ -522,12 +521,11 @@ auto GraphicsDevice::CreateAliasingResources(std::span<BufferDesc const> const b
           nullptr, 0, nullptr, IID_PPV_ARGS(&resource)),
         "Failed to create aliasing buffer.");
 
-      UINT cbv;
-      UINT srv;
-      UINT uav;
-      CreateBufferViews(*resource.Get(), buf_desc, cbv, srv, uav);
-      buffers->emplace_back(new Buffer{buf_alloc, std::move(resource), cbv, srv, uav, buf_desc},
-        DeviceChildDeleter<Buffer>{*this});
+      std::optional<UINT> as;
+      CreateAccelerationStructure(*resource.Get(), buf_desc, as);
+
+      buffers->emplace_back(new Buffer{buf_alloc, std::move(resource), as, buf_desc},
+        DeviceObjectDeleter<Buffer>{*this});
     }
   }
 
@@ -549,24 +547,38 @@ auto GraphicsDevice::CreateAliasingResources(std::span<BufferDesc const> const b
       CreateTextureViews(*resource.Get(), info.desc, dsvs, rtvs, srv, uav);
       textures->emplace_back(new Texture{
         alloc, std::move(resource), std::move(dsvs), std::move(rtvs), srv, uav, info.desc
-      }, DeviceChildDeleter<Texture>{*this});
+      }, DeviceObjectDeleter<Texture>{*this});
     }
   }
 }
 
 
+auto GraphicsDevice::CreateBufferView(BufferViewDesc const& desc,
+                                      SharedDeviceHandle<Buffer> const& buf) -> SharedDeviceHandle<BufferView> {
+  if (!buf) {
+    throw std::runtime_error{"Failed to create buffer view: buffer was null."};
+  }
+
+  if (auto const buf_size = buf->GetDesc().size; desc.offset > buf_size || desc.size > buf_size - desc.offset) {
+    throw std::runtime_error{"Failed to create buffer view: buffer too small."};
+  }
+
+  std::optional<UINT> cbv;
+  std::optional<UINT> srv;
+  std::optional<UINT> uav;
+  CreateBufferDescriptors(*buf, desc, cbv, srv, uav);
+
+  return SharedDeviceHandle<BufferView>{
+    new BufferView{buf, cbv, srv, uav, desc},
+    DeviceObjectDeleter<BufferView>{*this}
+  };
+}
+
+
 auto GraphicsDevice::DestroyBuffer(Buffer const* const buffer) -> void {
   if (buffer) {
-    if (buffer->cbv_) {
-      res_desc_heap_->Release(*buffer->cbv_);
-    }
-
-    if (buffer->srv_) {
-      res_desc_heap_->Release(*buffer->srv_);
-    }
-
-    if (buffer->uav_) {
-      res_desc_heap_->Release(*buffer->uav_);
+    if (buffer->as_) {
+      res_desc_heap_->Release(*buffer->as_);
     }
 
     {
@@ -642,6 +654,25 @@ auto GraphicsDevice::DestroySwapChain(SwapChain const* const swap_chain) -> void
 
 auto GraphicsDevice::DestroySampler(UINT const sampler) -> void {
   sampler_heap_->Release(sampler);
+}
+
+
+auto GraphicsDevice::DestroyBufferView(BufferView const* const buffer_view) -> void {
+  if (buffer_view) {
+    if (buffer_view->cbv_) {
+      res_desc_heap_->Release(*buffer_view->cbv_);
+    }
+
+    if (buffer_view->srv_) {
+      res_desc_heap_->Release(*buffer_view->srv_);
+    }
+
+    if (buffer_view->uav_) {
+      res_desc_heap_->Release(*buffer_view->uav_);
+    }
+
+    delete buffer_view;
+  }
 }
 
 
@@ -829,41 +860,16 @@ auto GraphicsDevice::SwapChainCreateTextures(SwapChain& swap_chain) -> void {
 
     swap_chain.textures_.emplace_back(new Texture{
       nullptr, std::move(buf), {}, std::move(rtvs), srv,
-      kInvalidResourceIndex, tex_desc
-    }, DeviceChildDeleter<Texture>{*this});
+      std::nullopt, tex_desc
+    }, DeviceObjectDeleter<Texture>{*this});
   }
 }
 
 
-auto GraphicsDevice::CreateBufferViews(ID3D12Resource2& buffer, BufferDesc const& desc, UINT& cbv, UINT& srv,
-                                       UINT& uav) const -> void {
-  if (HasAny(desc.usage, BufferUsage::kConstantBuffer)) {
-    cbv = res_desc_heap_->Allocate();
-    D3D12_CONSTANT_BUFFER_VIEW_DESC const cbv_desc{buffer.GetGPUVirtualAddress(), static_cast<UINT>(desc.size)};
-    device_->CreateConstantBufferView(&cbv_desc, res_desc_heap_->GetDescriptorCpuHandle(cbv));
-  } else {
-    cbv = kInvalidResourceIndex;
-  }
-
-  // Both shader resource and acceleration structure uses the the srv descriptor so can't support both.
-  // Also, would that be a good idea to view an AS as an SRV? Maybe not.
-  assert(!HasAll(desc.usage, BufferUsage::kShaderResource | BufferUsage::kAccelerationStructure));
-
-  if (HasAny(desc.usage, BufferUsage::kShaderResource)) {
-    srv = res_desc_heap_->Allocate();
-
-    D3D12_SHADER_RESOURCE_VIEW_DESC const srv_desc{
-      .Format = desc.stride == 1 ? DXGI_FORMAT_R32_TYPELESS : DXGI_FORMAT_UNKNOWN,
-      .ViewDimension = D3D12_SRV_DIMENSION_BUFFER,
-      .Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING,
-      .Buffer = {
-        0, static_cast<UINT>(desc.size / (desc.stride == 1 ? 4 : desc.stride)), desc.stride == 1 ? 0 : desc.stride,
-        desc.stride == 1 ? D3D12_BUFFER_SRV_FLAG_RAW : D3D12_BUFFER_SRV_FLAG_NONE
-      }
-    };
-    device_->CreateShaderResourceView(&buffer, &srv_desc, res_desc_heap_->GetDescriptorCpuHandle(srv));
-  } else if (HasAny(desc.usage, BufferUsage::kAccelerationStructure)) {
-    srv = res_desc_heap_->Allocate();
+auto GraphicsDevice::CreateAccelerationStructure(ID3D12Resource2& buffer, BufferDesc const& desc,
+                                                 std::optional<UINT>& as) const -> void {
+  if (HasAny(desc.usage, BufferUsage::kAccelerationStructure)) {
+    as = res_desc_heap_->Allocate();
 
     D3D12_SHADER_RESOURCE_VIEW_DESC const srv_desc{
       .Format = DXGI_FORMAT_UNKNOWN,
@@ -873,24 +879,163 @@ auto GraphicsDevice::CreateBufferViews(ID3D12Resource2& buffer, BufferDesc const
         .Location = buffer.GetGPUVirtualAddress()
       }
     };
-    device_->CreateShaderResourceView(nullptr, &srv_desc, res_desc_heap_->GetDescriptorCpuHandle(srv));
-  } else {
-    srv = kInvalidResourceIndex;
-  }
 
-  if (HasAny(desc.usage, BufferUsage::kUnorderedAccess)) {
-    uav = res_desc_heap_->Allocate();
-    D3D12_UNORDERED_ACCESS_VIEW_DESC const uav_desc{
-      .Format = desc.stride == 1 ? DXGI_FORMAT_R32_TYPELESS : DXGI_FORMAT_UNKNOWN,
-      .ViewDimension = D3D12_UAV_DIMENSION_BUFFER, .Buffer = {
-        .FirstElement = 0, .NumElements = static_cast<UINT>(desc.size / (desc.stride == 1 ? 4 : desc.stride)),
-        .StructureByteStride = desc.stride == 1 ? 0 : desc.stride, .CounterOffsetInBytes = 0,
-        .Flags = desc.stride == 1 ? D3D12_BUFFER_UAV_FLAG_RAW : D3D12_BUFFER_UAV_FLAG_NONE
-      }
-    };
-    device_->CreateUnorderedAccessView(&buffer, nullptr, &uav_desc, res_desc_heap_->GetDescriptorCpuHandle(uav));
+    device_->CreateShaderResourceView(nullptr, &srv_desc, res_desc_heap_->GetDescriptorCpuHandle(*as));
   } else {
-    uav = kInvalidResourceIndex;
+    as = std::nullopt;
+  }
+}
+
+
+auto GraphicsDevice::CreateBufferDescriptors(Buffer const& buffer, BufferViewDesc const& desc, std::optional<UINT>& cbv,
+                                             std::optional<UINT>& srv, std::optional<UINT>& uav) const -> void {
+  try {
+    auto const& buf_desc = buffer.GetDesc();
+
+    if (HasAny(desc.usage, BufferViewUsage::kConstantBuffer)) {
+      if (!HasAny(buf_desc.usage, BufferUsage::kConstantBuffer)) {
+        throw std::runtime_error{
+          "Failed to create constant buffer view: buffer does not support constant buffer usage."
+        };
+      }
+
+      if (desc.offset % D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT != 0) {
+        throw std::runtime_error{
+          std::format("Failed to create constant buffer view: buffer view offset is not multiple of {}.",
+            D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT)
+        };
+      }
+
+      if (desc.size % D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT != 0) {
+        throw std::runtime_error{
+          std::format("Failed to create constant buffer view: buffer view size is not multiple of {}.",
+            D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT)
+        };
+      }
+
+      if (desc.size > D3D12_REQ_CONSTANT_BUFFER_ELEMENT_COUNT * 16 /* sizeof(float4) */) {
+        throw std::runtime_error{"Failed to create constant buffer view: buffer view size too large."};
+      }
+
+      cbv = res_desc_heap_->Allocate();
+
+      D3D12_CONSTANT_BUFFER_VIEW_DESC const cbv_desc{
+        .BufferLocation = buffer.GetInternalResource()->GetGPUVirtualAddress() + desc.offset,
+        .SizeInBytes = static_cast<UINT>(desc.size)
+      };
+
+      device_->CreateConstantBufferView(&cbv_desc, res_desc_heap_->GetDescriptorCpuHandle(*cbv));
+    } else {
+      cbv = std::nullopt;
+    }
+
+    if (HasAny(desc.usage, BufferViewUsage::kShaderResource)) {
+      if (!HasAny(buf_desc.usage, BufferUsage::kShaderResource)) {
+        throw std::runtime_error{
+          "Failed to create shader resource view: buffer does not support shader resource usage."
+        };
+      }
+
+      if (desc.stride == 0) {
+        throw std::runtime_error{"Failed to create shader resource view: buffer view does not specify stride."};
+      }
+
+      auto const element_size = desc.stride == 1 ? 4u : desc.stride;
+
+      if (desc.offset % element_size != 0) {
+        throw std::runtime_error{
+          "Failed to create shader resource view: buffer view is misaligned for specified stride."
+        };
+      }
+
+      if (desc.size % element_size != 0) {
+        throw std::runtime_error{"Failed to create shader resource view: buffer view size is not multiple of stride."};
+      }
+
+      auto const element_count = desc.size / element_size;
+
+      if (element_count > std::numeric_limits<UINT>::max()) {
+        throw std::runtime_error{"Failed to create shader resource view: buffer view defines too many elements."};
+      }
+
+      srv = res_desc_heap_->Allocate();
+
+      D3D12_SHADER_RESOURCE_VIEW_DESC const srv_desc{
+        .Format = desc.stride == 1 ? DXGI_FORMAT_R32_TYPELESS : DXGI_FORMAT_UNKNOWN,
+        .ViewDimension = D3D12_SRV_DIMENSION_BUFFER,
+        .Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING,
+        .Buffer = {
+          .FirstElement = desc.offset / element_size,
+          .NumElements = static_cast<UINT>(element_count),
+          .StructureByteStride = desc.stride == 1 ? 0 : desc.stride,
+          .Flags = desc.stride == 1 ? D3D12_BUFFER_SRV_FLAG_RAW : D3D12_BUFFER_SRV_FLAG_NONE
+        }
+      };
+
+      device_->CreateShaderResourceView(buffer.GetInternalResource(), &srv_desc,
+        res_desc_heap_->GetDescriptorCpuHandle(*srv));
+    } else {
+      srv = std::nullopt;
+    }
+
+    if (HasAny(desc.usage, BufferViewUsage::kUnorderedAccess)) {
+      if (!HasAny(buf_desc.usage, BufferUsage::kUnorderedAccess)) {
+        throw std::runtime_error{
+          "Failed to create unordered access view: buffer does not support unordered access usage."
+        };
+      }
+
+      if (desc.stride == 0) {
+        throw std::runtime_error{"Failed to create unordered access view: buffer view does not specify stride."};
+      }
+
+      auto const element_size = desc.stride == 1 ? 4u : desc.stride;
+
+      if (desc.offset % element_size != 0) {
+        throw std::runtime_error{
+          "Failed to create unordered access view: buffer view is misaligned for specified stride."
+        };
+      }
+
+      if (desc.size % element_size != 0) {
+        throw std::runtime_error{"Failed to create unordered access view: buffer view size is not multiple of stride."};
+      }
+
+      auto const element_count = desc.size / element_size;
+
+      if (element_count > std::numeric_limits<UINT>::max()) {
+        throw std::runtime_error{"Failed to create unordered access view: buffer view defines too many elements."};
+      }
+
+      uav = res_desc_heap_->Allocate();
+
+      D3D12_UNORDERED_ACCESS_VIEW_DESC const uav_desc{
+        .Format = desc.stride == 1 ? DXGI_FORMAT_R32_TYPELESS : DXGI_FORMAT_UNKNOWN,
+        .ViewDimension = D3D12_UAV_DIMENSION_BUFFER,
+        .Buffer = {
+          .FirstElement = desc.offset / element_size,
+          .NumElements = static_cast<UINT>(element_count),
+          .StructureByteStride = desc.stride == 1 ? 0 : desc.stride,
+          .CounterOffsetInBytes = 0,
+          .Flags = desc.stride == 1 ? D3D12_BUFFER_UAV_FLAG_RAW : D3D12_BUFFER_UAV_FLAG_NONE
+        }
+      };
+
+      device_->CreateUnorderedAccessView(buffer.GetInternalResource(), nullptr, &uav_desc,
+        res_desc_heap_->GetDescriptorCpuHandle(*uav));
+    } else {
+      uav = std::nullopt;
+    }
+  } catch (...) {
+    if (cbv) { res_desc_heap_->Release(*cbv); }
+    if (srv) { res_desc_heap_->Release(*srv); }
+    if (uav) { res_desc_heap_->Release(*uav); }
+
+    cbv = std::nullopt;
+    srv = std::nullopt;
+    uav = std::nullopt;
+
+    throw;
   }
 }
 

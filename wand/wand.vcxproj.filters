@@ -24,7 +24,7 @@
     <ClCompile Include="src\sampler.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\device_child.cpp">
+    <ClCompile Include="src\device_object.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="src\format.cpp">
@@ -69,6 +69,9 @@
     <ClCompile Include="src\detail\buffer_helpers.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="src\buffer_view.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\wand\wand.hpp">
@@ -80,7 +83,7 @@
     <ClInclude Include="include\wand\platforms\d3d12.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="include\wand\device_child.hpp">
+    <ClInclude Include="include\wand\device_object.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\wand\sampler.hpp">
@@ -138,6 +141,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\wand\detail\buffer_helpers.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\wand\buffer_view.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

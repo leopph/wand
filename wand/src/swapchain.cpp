@@ -4,9 +4,10 @@
 
 using Microsoft::WRL::ComPtr;
 
+
 namespace wand {
-auto SwapChain::GetTextures() const -> std::span<SharedDeviceChildHandle<Texture const> const> {
-  return *std::bit_cast<std::span<SharedDeviceChildHandle<Texture const>>*>(&textures_);
+auto SwapChain::GetTextures() const -> std::span<SharedDeviceHandle<Texture const> const> {
+  return *std::bit_cast<std::span<SharedDeviceHandle<Texture const>>*>(&textures_);
 }
 
 
@@ -32,6 +33,5 @@ auto SwapChain::SetSyncInterval(UINT const sync_interval) -> void {
 
 SwapChain::SwapChain(ComPtr<IDXGISwapChain4> swap_chain, UINT const present_flags) :
   swap_chain_{std::move(swap_chain)},
-  present_flags_{present_flags} {
-}
+  present_flags_{present_flags} {}
 }

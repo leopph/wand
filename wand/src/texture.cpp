@@ -4,12 +4,14 @@
 
 using Microsoft::WRL::ComPtr;
 
+
 namespace wand {
 auto GetActualMipLevels(TextureDesc const& desc) -> UINT {
   return desc.mip_levels == 0
            ? static_cast<UINT16>(std::ceil(std::max(std::log2(desc.width), std::log2(desc.height)) + 1))
            : desc.mip_levels;
 }
+
 
 auto Texture::GetDesc() const -> TextureDesc const& {
   return desc_;
@@ -26,6 +28,16 @@ auto Texture::Unmap(UINT const subresource) const -> void {
 }
 
 
+auto Texture::GetShaderResource() const -> UINT {
+  return srv_.value();
+}
+
+
+auto Texture::GetUnorderedAccess() const -> UINT {
+  return uav_.value();
+}
+
+
 auto Texture::GetDepthStencilView(UINT const mip_index) const -> UINT {
   return dsvs_.at(mip_index);
 }
@@ -39,9 +51,10 @@ auto Texture::GetRenderTargetView(UINT const mip_index) const -> UINT {
 Texture::Texture(ComPtr<D3D12MA::Allocation> allocation, ComPtr<ID3D12Resource2> resource, std::vector<UINT> dsvs,
                  std::vector<UINT> rtvs, std::optional<UINT> const srv, std::optional<UINT> const uav,
                  TextureDesc const& desc) :
-  Resource{std::move(allocation), std::move(resource), srv, uav},
+  Resource{std::move(allocation), std::move(resource)},
   desc_{desc},
+  srv_{srv},
+  uav_{uav},
   dsvs_{std::move(dsvs)},
-  rtvs_{std::move(rtvs)} {
-}
+  rtvs_{std::move(rtvs)} {}
 }

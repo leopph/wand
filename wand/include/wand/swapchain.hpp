@@ -2,7 +2,7 @@
 
 #include <span>
 
-#include <wand/device_child.hpp>
+#include <wand/device_object.hpp>
 #include <wand/wandapi.hpp>
 
 
@@ -20,7 +20,7 @@ struct SwapChainDesc {
 class SwapChain {
 public:
   [[nodiscard]] WANDAPI
-  auto GetTextures() const -> std::span<SharedDeviceChildHandle<Texture const> const>;
+  auto GetTextures() const -> std::span<SharedDeviceHandle<Texture const> const>;
 
   [[nodiscard]] WANDAPI
   auto GetCurrentTextureIndex() const -> UINT;
@@ -38,7 +38,7 @@ private:
   explicit SwapChain(Microsoft::WRL::ComPtr<IDXGISwapChain4> swap_chain, UINT present_flags);
 
   Microsoft::WRL::ComPtr<IDXGISwapChain4> swap_chain_;
-  std::vector<SharedDeviceChildHandle<Texture>> textures_;
+  std::vector<SharedDeviceHandle<Texture>> textures_;
   std::atomic<UINT> sync_interval_{0};
   UINT present_flags_;
 

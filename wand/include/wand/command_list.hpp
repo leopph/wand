@@ -3,6 +3,7 @@
 #include <span>
 
 #include <wand/buffer.hpp>
+#include <wand/buffer_view.hpp>
 #include <wand/pipeline.hpp>
 #include <wand/rt_state_object.hpp>
 #include <wand/texture.hpp>
@@ -120,16 +121,16 @@ public:
   auto SetPipelineParameters(UINT index, std::span<UINT const> values) const -> void;
 
   WANDAPI
-  auto SetConstantBuffer(UINT param_idx, Buffer const& buf) -> void;
+  auto SetConstantBuffer(UINT param_idx, BufferView const& buf_view) -> void;
 
   WANDAPI
-  auto SetShaderResource(UINT param_idx, Buffer const& buf) -> void;
+  auto SetShaderResource(UINT param_idx, BufferView const& buf_view) -> void;
 
   WANDAPI
   auto SetShaderResource(UINT param_idx, Texture const& tex) -> void;
 
   WANDAPI
-  auto SetUnorderedAccess(UINT param_idx, Buffer const& buf) -> void;
+  auto SetUnorderedAccess(UINT param_idx, BufferView const& buf_view) -> void;
 
   WANDAPI
   auto SetUnorderedAccess(UINT param_idx, Texture const& tex) -> void;

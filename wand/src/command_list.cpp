@@ -282,17 +282,17 @@ auto CommandList::SetPipelineParameters(UINT const index, std::span<UINT const> 
 }
 
 
-auto CommandList::SetConstantBuffer(UINT const param_idx, Buffer const& buf) -> void {
-  assert(HasAny(buf.GetDesc().usage, BufferUsage::kConstantBuffer));
-  GenerateBarrier(buf, D3D12_BARRIER_SYNC_ALL_SHADING, D3D12_BARRIER_ACCESS_CONSTANT_BUFFER);
-  SetPipelineParameter(param_idx, buf.GetConstantBuffer());
+auto CommandList::SetConstantBuffer(UINT const param_idx, BufferView const& buf_view) -> void {
+  assert(HasAny(buf_view.GetDesc().usage, BufferViewUsage::kConstantBuffer));
+  GenerateBarrier(*buf_view.GetBuffer(), D3D12_BARRIER_SYNC_ALL_SHADING, D3D12_BARRIER_ACCESS_CONSTANT_BUFFER);
+  SetPipelineParameter(param_idx, buf_view.GetConstantBuffer());
 }
 
 
-auto CommandList::SetShaderResource(UINT const param_idx, Buffer const& buf) -> void {
-  assert(HasAny(buf.GetDesc().usage, BufferUsage::kShaderResource));
-  GenerateBarrier(buf, D3D12_BARRIER_SYNC_ALL_SHADING, D3D12_BARRIER_ACCESS_SHADER_RESOURCE);
-  SetPipelineParameter(param_idx, buf.GetShaderResource());
+auto CommandList::SetShaderResource(UINT const param_idx, BufferView const& buf_view) -> void {
+  assert(HasAny(buf_view.GetDesc().usage, BufferViewUsage::kShaderResource));
+  GenerateBarrier(*buf_view.GetBuffer(), D3D12_BARRIER_SYNC_ALL_SHADING, D3D12_BARRIER_ACCESS_SHADER_RESOURCE);
+  SetPipelineParameter(param_idx, buf_view.GetShaderResource());
 }
 
 
@@ -303,10 +303,10 @@ auto CommandList::SetShaderResource(UINT const param_idx, Texture const& tex) ->
 }
 
 
-auto CommandList::SetUnorderedAccess(UINT const param_idx, Buffer const& buf) -> void {
-  assert(HasAny(buf.GetDesc().usage, BufferUsage::kUnorderedAccess));
-  GenerateBarrier(buf, D3D12_BARRIER_SYNC_ALL_SHADING, D3D12_BARRIER_ACCESS_UNORDERED_ACCESS);
-  SetPipelineParameter(param_idx, buf.GetUnorderedAccess());
+auto CommandList::SetUnorderedAccess(UINT const param_idx, BufferView const& buf_view) -> void {
+  assert(HasAny(buf_view.GetDesc().usage, BufferViewUsage::kUnorderedAccess));
+  GenerateBarrier(*buf_view.GetBuffer(), D3D12_BARRIER_SYNC_ALL_SHADING, D3D12_BARRIER_ACCESS_UNORDERED_ACCESS);
+  SetPipelineParameter(param_idx, buf_view.GetUnorderedAccess());
 }
 
 

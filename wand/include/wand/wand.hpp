@@ -8,8 +8,9 @@
 #include <vector>
 
 #include <wand/buffer.hpp>
+#include <wand/buffer_view.hpp>
 #include <wand/command_list.hpp>
-#include <wand/device_child.hpp>
+#include <wand/device_object.hpp>
 #include <wand/fence.hpp>
 #include <wand/pipeline.hpp>
 #include <wand/rt_state_object.hpp>
@@ -39,7 +40,7 @@ struct AliasedTextureCreateInfo {
 
 namespace details {
 struct ExecuteBarrierCmdListRecord {
-  SharedDeviceChildHandle<CommandList> cmd_list;
+  SharedDeviceHandle<CommandList> cmd_list;
   UINT64 fence_completion_val;
 };
 }
@@ -58,29 +59,29 @@ public:
 
   [[nodiscard]] WANDAPI
   auto CreateBuffer(BufferDesc const& desc,
-                    CpuAccess cpu_access) -> SharedDeviceChildHandle<Buffer>;
+                    CpuAccess cpu_access) -> SharedDeviceHandle<Buffer>;
 
   [[nodiscard]] WANDAPI
   auto CreateTexture(TextureDesc const& desc, CpuAccess cpu_access,
-                     D3D12_CLEAR_VALUE const* clear_value) -> SharedDeviceChildHandle<Texture>;
+                     D3D12_CLEAR_VALUE const* clear_value) -> SharedDeviceHandle<Texture>;
 
   [[nodiscard]] WANDAPI
   auto CreatePipelineState(PipelineDesc const& desc,
-                           std::uint8_t num_32_bit_params) -> SharedDeviceChildHandle<PipelineState>;
+                           std::uint8_t num_32_bit_params) -> SharedDeviceHandle<PipelineState>;
 
   [[nodiscard]] WANDAPI
   auto CreateRtStateObject(RtStateObjectDesc& desc,
-                           std::uint8_t num_32_bit_params) -> SharedDeviceChildHandle<RtStateObject>;
+                           std::uint8_t num_32_bit_params) -> SharedDeviceHandle<RtStateObject>;
 
   [[nodiscard]]WANDAPI
-  auto CreateCommandList() -> SharedDeviceChildHandle<CommandList>;
+  auto CreateCommandList() -> SharedDeviceHandle<CommandList>;
 
   [[nodiscard]]WANDAPI
-  auto CreateFence(UINT64 initial_value) -> SharedDeviceChildHandle<Fence>;
+  auto CreateFence(UINT64 initial_value) -> SharedDeviceHandle<Fence>;
 
   [[nodiscard]]WANDAPI
   auto CreateSwapChain(SwapChainDesc const& desc,
-                       HWND window_handle) -> SharedDeviceChildHandle<SwapChain>;
+                       HWND window_handle) -> SharedDeviceHandle<SwapChain>;
 
   [[nodiscard]] WANDAPI
   auto CreateSampler(D3D12_SAMPLER_DESC const& desc) -> UniqueSamplerHandle;
@@ -88,8 +89,12 @@ public:
   WANDAPI
   auto CreateAliasingResources(std::span<BufferDesc const> buffer_descs,
                                std::span<AliasedTextureCreateInfo const> texture_infos, CpuAccess cpu_access,
-                               std::vector<SharedDeviceChildHandle<Buffer>>* buffers,
-                               std::vector<SharedDeviceChildHandle<Texture>>* textures) -> void;
+                               std::vector<SharedDeviceHandle<Buffer>>* buffers,
+                               std::vector<SharedDeviceHandle<Texture>>* textures) -> void;
+
+  [[nodiscard]] WANDAPI
+  auto CreateBufferView(BufferViewDesc const& desc,
+                        SharedDeviceHandle<Buffer> const& buf) -> SharedDeviceHandle<BufferView>;
 
   WANDAPI
   auto DestroyBuffer(Buffer const* buffer) -> void;
@@ -114,6 +119,9 @@ public:
 
   WANDAPI
   auto DestroySampler(UINT sampler) -> void;
+
+  WANDAPI
+  auto DestroyBufferView(BufferView const* buffer_view) -> void;
 
   WANDAPI
   auto WaitFence(Fence const& fence, UINT64 wait_value) const -> void;
@@ -146,8 +154,11 @@ public:
 private:
   auto SwapChainCreateTextures(SwapChain& swap_chain) -> void;
 
-  auto CreateBufferViews(ID3D12Resource2& buffer, BufferDesc const& desc, UINT& cbv, UINT& srv,
-                         UINT& uav) const -> void;
+  auto CreateAccelerationStructure(ID3D12Resource2& buffer, BufferDesc const& desc,
+                                   std::optional<UINT>& as) const -> void;
+  auto CreateBufferDescriptors(Buffer const& buffer, BufferViewDesc const& desc, std::optional<UINT>& cbv,
+                               std::optional<UINT>& srv,
+                               std::optional<UINT>& uav) const -> void;
   auto CreateTextureViews(ID3D12Resource2& texture, TextureDesc const& desc, std::vector<UINT>& dsvs,
                           std::vector<UINT>& rtvs, std::optional<UINT>& srv,
                           std::optional<UINT>& uav) const -> void;
@@ -188,8 +199,8 @@ private:
   UINT swap_chain_flags_{0};
   UINT present_flags_{0};
 
-  SharedDeviceChildHandle<Fence> idle_fence_;
-  SharedDeviceChildHandle<Fence> execute_barrier_fence_;
+  SharedDeviceHandle<Fence> idle_fence_;
+  SharedDeviceHandle<Fence> execute_barrier_fence_;
 
   mutable std::mutex queue_submission_mutex_;
   std::vector<details::ExecuteBarrierCmdListRecord> execute_barrier_cmd_lists_;
