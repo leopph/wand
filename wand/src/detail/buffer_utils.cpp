@@ -1,4 +1,4 @@
-#include <wand/detail/buffer_helpers.hpp>
+#include <wand/detail/buffer_utils.hpp>
 
 #include "wand/flags.hpp"
 

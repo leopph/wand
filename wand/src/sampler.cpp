@@ -1,12 +1,12 @@
 #include "wand/sampler.hpp"
 
-#include "wand/wand.hpp"
+#include "wand/graphics_device.hpp"
+
 
 namespace wand {
 UniqueSamplerHandle::UniqueSamplerHandle(UINT const resource, GraphicsDevice& device) :
   resource_{resource},
-  device_{&device} {
-}
+  device_{&device} {}
 
 
 UniqueSamplerHandle::UniqueSamplerHandle(UniqueSamplerHandle&& other) noexcept :

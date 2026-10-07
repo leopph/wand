@@ -1,6 +1,6 @@
 #include "wand/device_object.hpp"
 
-#include "wand/wand.hpp"
+#include "wand/graphics_device.hpp"
 
 
 namespace wand {

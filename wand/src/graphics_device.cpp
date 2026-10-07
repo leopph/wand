@@ -1,4 +1,4 @@
-#include "wand/wand.hpp"
+#include "wand/graphics_device.hpp"
 
 #include <algorithm>
 #include <array>
@@ -18,7 +18,7 @@
 #include "wand/flags.hpp"
 #include "wand/format.hpp"
 #include "wand/util.hpp"
-#include "wand/detail/buffer_helpers.hpp"
+#include "wand/detail/buffer_utils.hpp"
 #include "wand/platforms/detail/d3d12_internals.hpp"
 
 using Microsoft::WRL::ComPtr;

@@ -8,7 +8,7 @@
 
 #include "wand/common.hpp"
 #include "wand/flags.hpp"
-#include "wand/detail/buffer_helpers.hpp"
+#include "wand/detail/buffer_utils.hpp"
 #include "wand/platforms/detail/d3d12_internals.hpp"
 
 using Microsoft::WRL::ComPtr;

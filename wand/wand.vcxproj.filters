@@ -15,7 +15,7 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="src\wand.cpp">
+    <ClCompile Include="src\graphics_device.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\deps\D3D12MemoryAllocator\src\D3D12MemAlloc.cpp">
@@ -66,10 +66,13 @@
     <ClCompile Include="src\platforms\detail\d3d12_internals.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\detail\buffer_helpers.cpp">
+    <ClCompile Include="src\detail\buffer_utils.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="src\buffer_view.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\buffer_helpers.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -140,10 +143,16 @@
     <ClInclude Include="include\wand\flags.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="include\wand\detail\buffer_helpers.hpp">
+    <ClInclude Include="include\wand\detail\buffer_utils.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\wand\buffer_view.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\wand\buffer_helpers.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\wand\graphics_device.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
