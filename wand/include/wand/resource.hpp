@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <string_view>
 
 #include <wand/wandapi.hpp>
@@ -24,6 +25,9 @@ public:
   [[nodiscard]] WANDAPI
   auto GetInternalResource() const -> ID3D12Resource2*;
 
+  [[nodiscard]] WANDAPI
+  auto IsSealed() const -> bool;
+
 protected:
   Resource(Microsoft::WRL::ComPtr<D3D12MA::Allocation> allocation, Microsoft::WRL::ComPtr<ID3D12Resource2> resource);
 
@@ -33,6 +37,7 @@ protected:
 private:
   Microsoft::WRL::ComPtr<D3D12MA::Allocation> allocation_;
   Microsoft::WRL::ComPtr<ID3D12Resource2> resource_;
+  mutable std::atomic_bool sealed_{false};
 
   friend GraphicsDevice;
 };

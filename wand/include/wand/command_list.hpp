@@ -36,7 +36,7 @@ public:
   auto Begin(PipelineState const* pipeline_state) -> void;
 
   WANDAPI
-  auto End() const -> void;
+  auto End() -> void;
 
   WANDAPI
   auto BuildRaytracingAccelerationStructure(
@@ -95,6 +95,12 @@ public:
 
   WANDAPI
   auto Resolve(Texture const& dst, Texture const& src, DXGI_FORMAT format) -> void;
+
+  WANDAPI
+  auto Seal(Buffer const& buf) -> void;
+
+  WANDAPI
+  auto Seal(Texture const& tex) -> void;
 
   WANDAPI
   auto SetBlendFactor(std::span<FLOAT const, 4> blend_factor) const -> void;
@@ -168,6 +174,8 @@ private:
   Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList7> cmd_list_;
   detail::PipelineResourceStateTracker local_resource_states_;
   std::vector<details::PendingBarrier> pending_barriers_;
+  std::vector<Resource const*> sealed_in_list_;
+  std::vector<Texture const*> textures_to_seal_;
   detail::DescriptorHeap const* dsv_heap_;
   detail::DescriptorHeap const* rtv_heap_;
   detail::DescriptorHeap const* res_desc_heap_;

@@ -26,6 +26,11 @@ auto Resource::GetInternalResource() const -> ID3D12Resource2* {
 }
 
 
+auto Resource::IsSealed() const -> bool {
+  return sealed_.load(std::memory_order_acquire);
+}
+
+
 Resource::Resource(ComPtr<D3D12MA::Allocation> allocation, ComPtr<ID3D12Resource2> resource) :
   allocation_{std::move(allocation)},
   resource_{std::move(resource)} {}

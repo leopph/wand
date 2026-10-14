@@ -722,6 +722,10 @@ auto GraphicsDevice::ExecuteCommandLists(std::span<CommandList const> const cmd_
       for (auto const& [res, state] : cmd_list.local_resource_states_) {
         global_resource_states_.Record(res, {.layout = state.layout});
       }
+
+      for (auto const* const res : cmd_list.sealed_in_list_) {
+        res->sealed_.store(true, std::memory_order_release);
+      }
     }
 
     if (!pending_tex_barriers.empty()) {

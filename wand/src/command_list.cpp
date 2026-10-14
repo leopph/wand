@@ -15,6 +15,11 @@ using Microsoft::WRL::ComPtr;
 
 
 namespace wand {
+namespace {
+constexpr auto kSealedLayout = D3D12_BARRIER_LAYOUT_DIRECT_QUEUE_SHADER_RESOURCE;
+}
+
+
 auto CommandList::Begin(PipelineState const* pipeline_state) -> void {
   ThrowIfFailed(allocator_->Reset(), "Failed to reset command allocator.");
   ThrowIfFailed(cmd_list_->Reset(allocator_.Get(), pipeline_state ? pipeline_state->pipeline_state_.Get() : nullptr),
@@ -25,10 +30,15 @@ auto CommandList::Begin(PipelineState const* pipeline_state) -> void {
   SetRootSignature(pipeline_state ? pipeline_state->num_params_ : 0);
   local_resource_states_.Clear();
   pending_barriers_.clear();
+  sealed_in_list_.clear();
+  textures_to_seal_.clear();
 }
 
 
-auto CommandList::End() const -> void {
+auto CommandList::End() -> void {
+  for (auto const* const tex : textures_to_seal_) {
+    GenerateBarrier(*tex, D3D12_BARRIER_SYNC_NONE, D3D12_BARRIER_ACCESS_NO_ACCESS, kSealedLayout);
+  }
   ThrowIfFailed(cmd_list_->Close(), "Failed to close command list.");
 }
 
@@ -229,6 +239,17 @@ auto CommandList::Resolve(Texture const& dst, Texture const& src, DXGI_FORMAT co
 }
 
 
+auto CommandList::Seal(Buffer const& buf) -> void {
+  sealed_in_list_.emplace_back(&buf);
+}
+
+
+auto CommandList::Seal(Texture const& tex) -> void {
+  sealed_in_list_.emplace_back(&tex);
+  textures_to_seal_.emplace_back(&tex);
+}
+
+
 auto CommandList::SetBlendFactor(std::span<FLOAT const, 4> const blend_factor) const -> void {
   cmd_list_->OMSetBlendFactor(blend_factor.data());
 }
@@ -409,6 +430,11 @@ CommandList::CommandList(ComPtr<ID3D12CommandAllocator> allocator, ComPtr<ID3D12
 
 auto CommandList::GenerateBarrier(Buffer const& buf, D3D12_BARRIER_SYNC const sync,
                                   D3D12_BARRIER_ACCESS const access) -> void {
+  if (buf.IsSealed()) {
+    assert(!d3d12::detail::IsWriteAccess(access));
+    return;
+  }
+
   // Read operations don't need syncing, there's no writes to be made visible,
   // and buffers have no layout, so there's nothing to generate a barrier for.
   if (!detail::IsGpuWritable(buf.GetDesc())) {
@@ -480,6 +506,11 @@ auto CommandList::GenerateBarrier(Buffer const& buf, D3D12_BARRIER_SYNC const sy
 
 auto CommandList::GenerateBarrier(Texture const& tex, D3D12_BARRIER_SYNC const sync, D3D12_BARRIER_ACCESS const access,
                                   D3D12_BARRIER_LAYOUT const layout) -> void {
+  if (tex.IsSealed()) {
+    assert(!d3d12::detail::IsWriteAccess(access) && layout == kSealedLayout);
+    return;
+  }
+
   auto const local_state{local_resource_states_.Get(tex.GetInternalResource())};
 
   // This builds heavily on the fact that wand::GraphicsDevice::ExecuteCommandLists
