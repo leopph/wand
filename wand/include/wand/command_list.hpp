@@ -39,6 +39,10 @@ public:
   auto End() const -> void;
 
   WANDAPI
+  auto BuildRaytracingAccelerationStructure(
+    std::span<BuildRaytracingAccelerationStructureDesc const> descs) -> void;
+
+  WANDAPI
   auto ClearDepthStencil(Texture const& tex, D3D12_CLEAR_FLAGS clear_flags, FLOAT depth, UINT8 stencil,
                          std::span<D3D12_RECT const> rects, UINT16 mip_level = 0) -> void;
 
@@ -142,8 +146,11 @@ public:
   auto SetRtState(RtStateObject const& rt_state) -> void;
 
   WANDAPI
-  auto BuildRaytracingAccelerationStructure(
-    std::span<BuildRaytracingAccelerationStructureDesc const> descs) -> void;
+  auto UseBuffer(Buffer const& buf, D3D12_BARRIER_SYNC sync, D3D12_BARRIER_ACCESS access) -> void;
+
+  WANDAPI
+  auto UseTexture(Texture const& tex, D3D12_BARRIER_SYNC sync, D3D12_BARRIER_ACCESS access,
+                  D3D12_BARRIER_LAYOUT layout) -> void;
 
 private:
   auto SetRootSignature(std::uint8_t num_params) const -> void;
