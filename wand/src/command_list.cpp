@@ -17,6 +17,7 @@ using Microsoft::WRL::ComPtr;
 namespace wand {
 namespace {
 constexpr auto kSealedLayout = D3D12_BARRIER_LAYOUT_DIRECT_QUEUE_SHADER_RESOURCE;
+constexpr auto kMaxEvenNameLength = 30uz;
 }
 
 
@@ -32,6 +33,10 @@ auto CommandList::Begin(PipelineState const* pipeline_state) -> void {
   pending_barriers_.clear();
   sealed_in_list_.clear();
   textures_to_seal_.clear();
+
+#ifndef NDEBUG
+  event_depth_ = 0;
+#endif
 }
 
 
@@ -39,7 +44,31 @@ auto CommandList::End() -> void {
   for (auto const* const tex : textures_to_seal_) {
     GenerateBarrier(*tex, D3D12_BARRIER_SYNC_NONE, D3D12_BARRIER_ACCESS_NO_ACCESS, kSealedLayout);
   }
+  assert(event_depth_ == 0 && "CommandList::End before EndEvent");
   ThrowIfFailed(cmd_list_->Close(), "Failed to close command list.");
+}
+
+
+auto CommandList::BeginEvent(std::wstring_view const name) -> void {
+  std::array<wchar_t, kMaxEvenNameLength + 1> buf;
+  auto const len = std::min(name.size(), kMaxEvenNameLength);
+  std::ranges::copy(name.substr(0, len), buf.begin());
+  buf[len] = L'\0';
+  cmd_list_->BeginEvent(0, buf.data(), static_cast<UINT>((len + 1) * sizeof(wchar_t)));
+
+#ifndef NDEBUG
+  ++event_depth_;
+#endif
+}
+
+
+auto CommandList::EndEvent() -> void {
+  assert(event_depth_ > 0 && "EndEvent without maching BeginEvent");
+  cmd_list_->EndEvent();
+
+#ifndef NDEBUG
+  --event_depth_;
+#endif
 }
 
 

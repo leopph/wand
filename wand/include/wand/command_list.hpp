@@ -1,6 +1,8 @@
 #pragma once
 
+#include <cstdint>
 #include <span>
+#include <string_view>
 
 #include <wand/buffer.hpp>
 #include <wand/buffer_view.hpp>
@@ -37,6 +39,12 @@ public:
 
   WANDAPI
   auto End() -> void;
+
+  WANDAPI
+  auto BeginEvent(std::wstring_view name) -> void;
+
+  WANDAPI
+  auto EndEvent() -> void;
 
   WANDAPI
   auto BuildRaytracingAccelerationStructure(
@@ -183,6 +191,10 @@ private:
   detail::RootSignatureCache* root_signatures_;
   bool compute_pipeline_set_{false};
   bool pipeline_allows_ds_write_{false};
+
+#ifndef NDEBUG
+  std::uint32_t event_depth_{0};
+#endif
 
   friend GraphicsDevice;
 };

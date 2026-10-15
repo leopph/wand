@@ -75,6 +75,9 @@
     <ClCompile Include="src\buffer_helpers.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="src\command_list_helpers.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\wand\wand.hpp">
@@ -153,6 +156,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\wand\graphics_device.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\wand\command_list_helpers.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
