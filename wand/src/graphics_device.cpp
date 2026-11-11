@@ -842,8 +842,11 @@ auto GraphicsDevice::SwapChainCreateTextures(SwapChain& swap_chain) -> void {
   ThrowIfFailed(swap_chain.swap_chain_->GetDesc1(&desc), "Failed to retrieve swap chain desc.");
 
   TextureDesc const tex_desc{
-    TextureDimension::k2D, desc.Width, desc.Height, 1, 1, desc.Format, 1, false,
-    (desc.BufferUsage & DXGI_USAGE_RENDER_TARGET_OUTPUT) != 0, (desc.BufferUsage & DXGI_USAGE_SHADER_INPUT) != 0, false
+    .dimension = TextureDimension::k2D, .width = desc.Width, .height = desc.Height, .depth_or_array_size = 1,
+    .mip_levels = 1, .format = desc.Format, .sample_count = 1,
+    .component_mapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING, .depth_stencil = false,
+    .render_target = (desc.BufferUsage & DXGI_USAGE_RENDER_TARGET_OUTPUT) != 0,
+    .shader_resource = (desc.BufferUsage & DXGI_USAGE_SHADER_INPUT) != 0, .unordered_access = false
   };
 
   for (UINT i{0}; i < desc.BufferCount; i++) {
@@ -1167,7 +1170,7 @@ auto GraphicsDevice::CreateTextureViews(ID3D12Resource2& texture, TextureDesc co
 
   if (desc.shader_resource) {
     D3D12_SHADER_RESOURCE_VIEW_DESC srv_desc{
-      .Format = rtv_srv_uav_format, .Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING
+      .Format = rtv_srv_uav_format, .Shader4ComponentMapping = desc.component_mapping
     };
     if (desc.dimension == TextureDimension::k1D) {
       if (desc.depth_or_array_size == 1) {

@@ -24,6 +24,7 @@ struct TextureDesc {
   UINT16 mip_levels;
   DXGI_FORMAT format;
   UINT sample_count;
+  UINT component_mapping;
 
   bool depth_stencil;
   bool render_target;
