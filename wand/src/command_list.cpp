@@ -72,45 +72,37 @@ auto CommandList::EndEvent() -> void {
 }
 
 
-auto CommandList::BuildRaytracingAccelerationStructure(
-  std::span<BuildRaytracingAccelerationStructureDesc const> descs) -> void {
-  std::vector<D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC> d3d_descs;
-  std::ranges::transform(
-    descs, std::back_inserter(d3d_descs),
-    [](BuildRaytracingAccelerationStructureDesc const& desc) {
-      return D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC{
-        .DestAccelerationStructureData = desc.dst_as->GetInternalResource()->GetGPUVirtualAddress(),
-        .Inputs = desc.inputs,
-        .SourceAccelerationStructureData = desc.src_as
-                                             ? desc.src_as->GetInternalResource()->GetGPUVirtualAddress()
-                                             : 0,
-        .ScratchAccelerationStructureData = desc.scratch_buffer
-                                              ? desc.scratch_buffer->GetInternalResource()->GetGPUVirtualAddress()
-                                              : 0
-      };
-    });
+auto CommandList::BuildRaytracingAccelerationStructure(BuildRaytracingAccelerationStructureDesc const& desc) -> void {
+  // Source first: for an in-place update (src == dst) the tracker must end in the write state so a later read
+  // generates a barrier.
+  if (desc.src_as) {
+    assert(HasAny(desc.src_as->GetDesc().usage, BufferUsage::kAccelerationStructure));
+    GenerateBarrier(*desc.src_as, D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
+                    D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_READ);
+  }
 
-  std::ranges::for_each(descs, [this](BuildRaytracingAccelerationStructureDesc const& desc) {
-    // Source first: for an in-place update (src == dst) the tracker must end in the write state so a later read
-    // generates a barrier.
-    if (desc.src_as) {
-      assert(HasAny(desc.src_as->GetDesc().usage, BufferUsage::kAccelerationStructure));
-      GenerateBarrier(*desc.src_as, D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
-        D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_READ);
-    }
+  assert(HasAny(desc.dst_as->GetDesc().usage, BufferUsage::kAccelerationStructure));
+  GenerateBarrier(*desc.dst_as, D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
+                  D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_WRITE);
 
-    assert(HasAny(desc.dst_as->GetDesc().usage, BufferUsage::kAccelerationStructure));
-    GenerateBarrier(*desc.dst_as, D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
-      D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_WRITE);
+  if (desc.scratch_buffer) {
+    assert(HasAny(desc.scratch_buffer->GetDesc().usage, BufferUsage::kAccelerationScratch));
+    GenerateBarrier(*desc.scratch_buffer, D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
+                    D3D12_BARRIER_ACCESS_UNORDERED_ACCESS);
+  }
 
-    if (desc.scratch_buffer) {
-      assert(HasAny(desc.scratch_buffer->GetDesc().usage, BufferUsage::kAccelerationScratch));
-      GenerateBarrier(*desc.scratch_buffer, D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
-        D3D12_BARRIER_ACCESS_UNORDERED_ACCESS);
-    }
-  });
+  D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC const d3d_desc{
+    .DestAccelerationStructureData = desc.dst_as->GetInternalResource()->GetGPUVirtualAddress(),
+    .Inputs = desc.inputs,
+    .SourceAccelerationStructureData = desc.src_as
+                                         ? desc.src_as->GetInternalResource()->GetGPUVirtualAddress()
+                                         : 0,
+    .ScratchAccelerationStructureData = desc.scratch_buffer
+                                          ? desc.scratch_buffer->GetInternalResource()->GetGPUVirtualAddress()
+                                          : 0
+  };
 
-  cmd_list_->BuildRaytracingAccelerationStructure(d3d_descs.data(), 0, nullptr);
+  cmd_list_->BuildRaytracingAccelerationStructure(&d3d_desc, 0, nullptr);
 }
 
 

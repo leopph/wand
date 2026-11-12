@@ -47,8 +47,7 @@ public:
   auto EndEvent() -> void;
 
   WANDAPI
-  auto BuildRaytracingAccelerationStructure(
-    std::span<BuildRaytracingAccelerationStructureDesc const> descs) -> void;
+  auto BuildRaytracingAccelerationStructure(BuildRaytracingAccelerationStructureDesc const& desc) -> void;
 
   WANDAPI
   auto ClearDepthStencil(Texture const& tex, D3D12_CLEAR_FLAGS clear_flags, FLOAT depth, UINT8 stencil,
