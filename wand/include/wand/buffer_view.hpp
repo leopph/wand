@@ -3,6 +3,7 @@
 #include <cstdint>
 
 #include <wand/buffer.hpp>
+#include <wand/buffer_range.hpp>
 #include <wand/buffer_region.hpp>
 #include <wand/device_object.hpp>
 #include <wand/wandapi.hpp>
@@ -33,6 +34,9 @@ public:
 
   [[nodiscard]] WANDAPI
   auto GetRegion() const -> BufferRegion const&;
+
+  [[nodiscard]] WANDAPI
+  auto GetRange() const -> BufferRange;
 
   [[nodiscard]] WANDAPI
   auto GetConstantBuffer() const -> UINT;

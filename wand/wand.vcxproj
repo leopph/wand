@@ -127,6 +127,7 @@
     <ClInclude Include="include\wand\barrier.hpp" />
     <ClInclude Include="include\wand\buffer.hpp" />
     <ClInclude Include="include\wand\buffer_helpers.hpp" />
+    <ClInclude Include="include\wand\buffer_range.hpp" />
     <ClInclude Include="include\wand\buffer_region.hpp" />
     <ClInclude Include="include\wand\buffer_view.hpp" />
     <ClInclude Include="include\wand\command_list.hpp" />
@@ -154,6 +155,7 @@
     <ClInclude Include="include\wand\wandapi.hpp" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="include\wand\buffer_range.inl" />
     <None Include="include\wand\buffer_region.inl" />
     <None Include="include\wand\flags.inl" />
     <None Include="include\wand\detail\resource_state_tracker.inl" />

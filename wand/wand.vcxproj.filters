@@ -164,6 +164,9 @@
     <ClInclude Include="include\wand\buffer_region.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="include\wand\buffer_range.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
@@ -177,6 +180,9 @@
       <Filter>Header Files</Filter>
     </None>
     <None Include="include\wand\buffer_region.inl">
+      <Filter>Header Files</Filter>
+    </None>
+    <None Include="include\wand\buffer_range.inl">
       <Filter>Header Files</Filter>
     </None>
   </ItemGroup>

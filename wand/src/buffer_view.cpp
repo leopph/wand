@@ -19,6 +19,11 @@ auto BufferView::GetRegion() const -> BufferRegion const& {
 }
 
 
+auto BufferView::GetRange() const -> BufferRange {
+  return BufferRange{*buf_, desc_.region};
+}
+
+
 auto BufferView::GetConstantBuffer() const -> UINT {
   return cbv_.value();
 }
