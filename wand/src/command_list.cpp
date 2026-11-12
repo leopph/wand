@@ -5,6 +5,7 @@
 #include <bit>
 #include <cassert>
 #include <iterator>
+#include <utility>
 
 #include "wand/common.hpp"
 #include "wand/flags.hpp"
@@ -18,6 +19,20 @@ namespace wand {
 namespace {
 constexpr auto kSealedLayout = D3D12_BARRIER_LAYOUT_DIRECT_QUEUE_SHADER_RESOURCE;
 constexpr auto kMaxEvenNameLength = 30uz;
+
+
+[[nodiscard]] [[maybe_unused]]
+auto ToD3D12(AccelerationStructureType const type) -> D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE {
+  switch (type) {
+    case AccelerationStructureType::kBottomLevel:
+      return D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL;
+    case AccelerationStructureType::kTopLevel:
+      return D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL;
+  }
+
+  assert(false && "Unhandled acceleration structure type");
+  std::unreachable();
+}
 }
 
 
@@ -73,32 +88,54 @@ auto CommandList::EndEvent() -> void {
 
 
 auto CommandList::BuildRaytracingAccelerationStructure(BuildRaytracingAccelerationStructureDesc const& desc) -> void {
+#ifndef NDEBUG
+  {
+    ComPtr<ID3D12Device5> device;
+    ThrowIfFailed(cmd_list_->GetDevice(IID_PPV_ARGS(&device)), "Failed to get device.");
+    D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO info;
+    device->GetRaytracingAccelerationStructurePrebuildInfo(&desc.inputs, &info);
+
+    assert(desc.dst_as.get().GetRegion().size >= info.ResultDataMaxSizeInBytes && "Build AS destination too small.");
+
+    auto const is_update = (desc.inputs.Flags & D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PERFORM_UPDATE) != 0;
+    auto const needed_scratch_size = is_update ? info.UpdateScratchDataSizeInBytes : info.ScratchDataSizeInBytes;
+    assert(
+      (needed_scratch_size == 0 || (desc.scratch_buffer && desc.scratch_buffer->GetRegion().size >= needed_scratch_size)
+      ) && "Build AS scratch buffer too small.");
+  }
+#endif
+
+  assert(desc.inputs.Type == ToD3D12(desc.dst_as.get().GetDesc().type) &&
+    "AS build input type must match destination type.");
+
   // Source first: for an in-place update (src == dst) the tracker must end in the write state so a later read
   // generates a barrier.
   if (desc.src_as) {
-    assert(HasAny(desc.src_as->GetDesc().usage, BufferUsage::kAccelerationStructure));
-    GenerateBarrier(*desc.src_as, D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
-                    D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_READ);
+    assert(desc.src_as->GetDesc().type == desc.dst_as.get().GetDesc().type &&
+      "AS build source and destination types must match.");
+    GenerateBarrier(*desc.src_as->GetBuffer(), D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
+      D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_READ);
   }
 
-  assert(HasAny(desc.dst_as->GetDesc().usage, BufferUsage::kAccelerationStructure));
-  GenerateBarrier(*desc.dst_as, D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
-                  D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_WRITE);
+  GenerateBarrier(*desc.dst_as.get().GetBuffer(), D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
+    D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_WRITE);
 
   if (desc.scratch_buffer) {
-    assert(HasAny(desc.scratch_buffer->GetDesc().usage, BufferUsage::kAccelerationScratch));
-    GenerateBarrier(*desc.scratch_buffer, D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
-                    D3D12_BARRIER_ACCESS_UNORDERED_ACCESS);
+    assert(HasAny(desc.scratch_buffer->GetBuffer().GetDesc().usage, BufferUsage::kAccelerationScratch));
+    assert(desc.scratch_buffer->GetRegion().offset % D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT == 0
+      && "AS build scratch buffer must be properly aligned.");
+    GenerateBarrier(desc.scratch_buffer->GetBuffer(), D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
+      D3D12_BARRIER_ACCESS_UNORDERED_ACCESS);
   }
 
   D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC const d3d_desc{
-    .DestAccelerationStructureData = desc.dst_as->GetInternalResource()->GetGPUVirtualAddress(),
+    .DestAccelerationStructureData = desc.dst_as.get().GetGpuAddress(),
     .Inputs = desc.inputs,
     .SourceAccelerationStructureData = desc.src_as
-                                         ? desc.src_as->GetInternalResource()->GetGPUVirtualAddress()
+                                         ? desc.src_as->GetGpuAddress()
                                          : 0,
     .ScratchAccelerationStructureData = desc.scratch_buffer
-                                          ? desc.scratch_buffer->GetInternalResource()->GetGPUVirtualAddress()
+                                          ? detail::GetGpuAddress(*desc.scratch_buffer)
                                           : 0
   };
 
@@ -398,6 +435,14 @@ auto CommandList::SetUnorderedAccess(UINT const param_idx, Texture const& tex) -
   GenerateBarrier(tex, D3D12_BARRIER_SYNC_ALL_SHADING, D3D12_BARRIER_ACCESS_UNORDERED_ACCESS,
     D3D12_BARRIER_LAYOUT_DIRECT_QUEUE_UNORDERED_ACCESS);
   SetPipelineParameter(param_idx, tex.GetUnorderedAccess());
+}
+
+
+auto CommandList::SetAccelerationStructure(UINT const param_idx, AccelerationStructure const& as) -> void {
+  assert(as.GetDesc().type == AccelerationStructureType::kTopLevel && "an AS set on the pipeline must be top-level.");
+  GenerateBarrier(*as.GetBuffer(), D3D12_BARRIER_SYNC_ALL_SHADING,
+    D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_READ);
+  SetPipelineParameter(param_idx, as.GetShaderResource());
 }
 
 

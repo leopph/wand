@@ -1,7 +1,6 @@
 #pragma once
 
 #include <cstdint>
-#include <optional>
 
 #include <wand/resource.hpp>
 #include <wand/wandapi.hpp>
@@ -38,15 +37,11 @@ public:
   [[nodiscard]] WANDAPI
   auto GetDesc() const -> BufferDesc const&;
 
-  [[nodiscard]] WANDAPI
-  auto GetAccelerationStructure() const -> UINT;
-
 private:
   Buffer(Microsoft::WRL::ComPtr<D3D12MA::Allocation> allocation, Microsoft::WRL::ComPtr<ID3D12Resource2> resource,
-         std::optional<UINT> as, BufferDesc const& desc);
+         BufferDesc const& desc);
 
   BufferDesc desc_;
-  std::optional<UINT> as_;
 
   friend GraphicsDevice;
 };

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 
 #include <wand/buffer.hpp>
 #include <wand/buffer_range.hpp>

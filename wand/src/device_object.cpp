@@ -28,6 +28,8 @@ auto DeviceObjectDeleter<T>::operator()(T const* device_child) -> void {
       device_->DestroySwapChain(device_child);
     } else if constexpr (std::same_as<T, BufferView>) {
       device_->DestroyBufferView(device_child);
+    } else if constexpr (std::same_as<T, AccelerationStructure>) {
+      device_->DestroyAccelerationStructure(device_child);
     }
   }
 }
@@ -41,4 +43,5 @@ template class DeviceObjectDeleter<CommandList>;
 template class DeviceObjectDeleter<Fence>;
 template class DeviceObjectDeleter<SwapChain>;
 template class DeviceObjectDeleter<BufferView>;
+template class DeviceObjectDeleter<AccelerationStructure>;
 }

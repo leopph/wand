@@ -16,6 +16,7 @@ class CommandList;
 class Fence;
 class SwapChain;
 class BufferView;
+class AccelerationStructure;
 
 template<typename T>concept DeviceObject =
   std::same_as<std::remove_const_t<T>, Buffer> ||
@@ -25,7 +26,8 @@ template<typename T>concept DeviceObject =
   std::same_as<std::remove_const_t<T>, CommandList> ||
   std::same_as<std::remove_const_t<T>, Fence> ||
   std::same_as<std::remove_const_t<T>, SwapChain> ||
-  std::same_as<std::remove_const_t<T>, BufferView>;
+  std::same_as<std::remove_const_t<T>, BufferView> ||
+  std::same_as<std::remove_const_t<T>, AccelerationStructure>;
 
 template<DeviceObject T>
 class DeviceObjectDeleter;
@@ -59,4 +61,5 @@ extern template class DeviceObjectDeleter<CommandList>;
 extern template class DeviceObjectDeleter<Fence>;
 extern template class DeviceObjectDeleter<SwapChain>;
 extern template class DeviceObjectDeleter<BufferView>;
+extern template class DeviceObjectDeleter<AccelerationStructure>;
 }

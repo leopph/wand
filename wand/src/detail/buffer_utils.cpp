@@ -13,4 +13,9 @@ auto IsGpuWritable(BufferDesc const& desc) noexcept -> bool {
 
   return HasAny(desc.usage, writes);
 }
+
+
+auto GetGpuAddress(BufferRange const& range) -> D3D12_GPU_VIRTUAL_ADDRESS {
+  return range.GetBuffer().GetInternalResource()->GetGPUVirtualAddress() + range.GetRegion().offset;
+}
 }

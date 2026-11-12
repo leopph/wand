@@ -1,9 +1,12 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
+#include <optional>
 #include <span>
 #include <string_view>
 
+#include <wand/acceleration_structure.hpp>
 #include <wand/buffer.hpp>
 #include <wand/buffer_view.hpp>
 #include <wand/pipeline.hpp>
@@ -25,10 +28,10 @@ struct PendingBarrier {
 
 
 struct BuildRaytracingAccelerationStructureDesc {
-  Buffer const* dst_as;
+  std::reference_wrapper<AccelerationStructure const> dst_as;
   D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs;
-  Buffer const* src_as; // Optional, for updates
-  Buffer const* scratch_buffer;
+  AccelerationStructure const* src_as; // Optional, for updates
+  std::optional<BufferRange> scratch_buffer;
 };
 
 
@@ -151,6 +154,9 @@ public:
 
   WANDAPI
   auto SetUnorderedAccess(UINT param_idx, Texture const& tex) -> void;
+
+  WANDAPI
+  auto SetAccelerationStructure(UINT param_idx, AccelerationStructure const& as) -> void;
 
   WANDAPI
   auto SetPipelineState(PipelineState const& pipeline_state) -> void;

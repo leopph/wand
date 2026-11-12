@@ -7,6 +7,7 @@
 #include <span>
 #include <vector>
 
+#include <wand/acceleration_structure.hpp>
 #include <wand/buffer.hpp>
 #include <wand/buffer_view.hpp>
 #include <wand/command_list.hpp>
@@ -96,6 +97,11 @@ public:
   auto CreateBufferView(BufferViewDesc const& desc,
                         SharedDeviceHandle<Buffer> const& buf) -> SharedDeviceHandle<BufferView>;
 
+  [[nodiscard]] WANDAPI
+  auto CreateAccelerationStructure(AccelerationStructureDesc const& desc,
+                                   SharedDeviceHandle<Buffer> const& buf)
+    -> SharedDeviceHandle<AccelerationStructure>;
+
   WANDAPI
   auto DestroyBuffer(Buffer const* buffer) -> void;
 
@@ -122,6 +128,9 @@ public:
 
   WANDAPI
   auto DestroyBufferView(BufferView const* buffer_view) -> void;
+
+  WANDAPI
+  auto DestroyAccelerationStructure(AccelerationStructure const* as) -> void;
 
   WANDAPI
   auto WaitFence(Fence const& fence, UINT64 wait_value) const -> void;
@@ -154,8 +163,7 @@ public:
 private:
   auto SwapChainCreateTextures(SwapChain& swap_chain) -> void;
 
-  auto CreateAccelerationStructure(ID3D12Resource2& buffer, BufferDesc const& desc,
-                                   std::optional<UINT>& as) const -> void;
+  auto CreateAsDescriptor(D3D12_GPU_VIRTUAL_ADDRESS gpu_address) -> UINT;
   auto CreateBufferDescriptors(Buffer const& buffer, BufferViewDesc const& desc, std::optional<UINT>& cbv,
                                std::optional<UINT>& srv,
                                std::optional<UINT>& uav) const -> void;

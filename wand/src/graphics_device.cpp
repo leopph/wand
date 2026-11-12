@@ -245,16 +245,13 @@ auto GraphicsDevice::CreateBuffer(BufferDesc const& desc,
   ThrowIfFailed(allocator_->CreateResource3(&alloc_desc, &res_desc, D3D12_BARRIER_LAYOUT_UNDEFINED, nullptr, 0, nullptr,
     &allocation, IID_PPV_ARGS(&resource)), "Failed to create buffer.");
 
-  std::optional<UINT> as;
-  CreateAccelerationStructure(*resource.Get(), desc, as);
-
   {
     std::scoped_lock const lck{state_tracker_mutex_};
     global_resource_states_.Record(resource.Get(), {.layout = D3D12_BARRIER_LAYOUT_UNDEFINED});
   }
 
   return SharedDeviceHandle<Buffer>{
-    new Buffer{std::move(allocation), std::move(resource), as, desc},
+    new Buffer{std::move(allocation), std::move(resource), desc},
     DeviceObjectDeleter<Buffer>{*this}
   };
 }
@@ -521,10 +518,7 @@ auto GraphicsDevice::CreateAliasingResources(std::span<BufferDesc const> const b
           nullptr, 0, nullptr, IID_PPV_ARGS(&resource)),
         "Failed to create aliasing buffer.");
 
-      std::optional<UINT> as;
-      CreateAccelerationStructure(*resource.Get(), buf_desc, as);
-
-      buffers->emplace_back(new Buffer{buf_alloc, std::move(resource), as, buf_desc},
+      buffers->emplace_back(new Buffer{buf_alloc, std::move(resource), buf_desc},
         DeviceObjectDeleter<Buffer>{*this});
     }
   }
@@ -582,12 +576,53 @@ auto GraphicsDevice::CreateBufferView(BufferViewDesc const& desc,
 }
 
 
+auto GraphicsDevice::CreateAccelerationStructure(AccelerationStructureDesc const& desc,
+                                                 SharedDeviceHandle<Buffer> const& buf)
+  -> SharedDeviceHandle<AccelerationStructure> {
+  if (!buf) {
+    throw std::runtime_error{"Failed to create acceleration structure: buffer was null."};
+  }
+
+  if (!HasAny(buf->GetDesc().usage, BufferUsage::kAccelerationStructure)) {
+    throw std::runtime_error{
+      "Failed to create acceleration structure: buffer does not support acceleration structure usage."
+    };
+  }
+
+  auto const buf_size = buf->GetDesc().size;
+
+  auto const resolved_desc = AccelerationStructureDesc{
+    .region = ResolveRegion(desc.region, buf_size),
+    .type = desc.type
+  };
+
+  if (!IsValidRegion(resolved_desc.region, buf_size)) {
+    throw std::runtime_error{"Failed to create acceleration structure: region is empty or exceeds the buffer."};
+  }
+
+  if (resolved_desc.region.offset % D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT != 0) {
+    throw std::runtime_error{"Failed to create acceleration structure: region is misaligned."};
+  }
+
+  if (resolved_desc.region.stride != 0) {
+    throw std::runtime_error{"Failed to create acceleration structure: region has a non-zero stride."};
+  }
+
+  std::optional<UINT> srv;
+
+  if (resolved_desc.type == AccelerationStructureType::kTopLevel) {
+    srv = CreateAsDescriptor(detail::GetGpuAddress(BufferRange{*buf, resolved_desc.region}));
+  }
+
+  return SharedDeviceHandle<AccelerationStructure>{
+    new AccelerationStructure{buf, srv, resolved_desc},
+    DeviceObjectDeleter<AccelerationStructure>{*this}
+  };
+}
+
+
 auto GraphicsDevice::DestroyBuffer(Buffer const* const buffer) -> void {
   if (buffer) {
-    if (buffer->as_) {
-      res_desc_heap_->Release(*buffer->as_);
-    }
-
     {
       std::scoped_lock const lck{state_tracker_mutex_};
       global_resource_states_.Erase(buffer->resource_.Get());
@@ -679,6 +714,19 @@ auto GraphicsDevice::DestroyBufferView(BufferView const* const buffer_view) -> v
     }
 
     delete buffer_view;
+  }
+}
+
+
+// ReSharper disable once CppMemberFunctionMayBeConst
+// Logically not const.
+auto GraphicsDevice::DestroyAccelerationStructure(AccelerationStructure const* const as) -> void {
+  if (as) {
+    if (as->srv_) {
+      res_desc_heap_->Release(*as->srv_);
+    }
+
+    delete as;
   }
 }
 
@@ -880,24 +928,22 @@ auto GraphicsDevice::SwapChainCreateTextures(SwapChain& swap_chain) -> void {
 }
 
 
-auto GraphicsDevice::CreateAccelerationStructure(ID3D12Resource2& buffer, BufferDesc const& desc,
-                                                 std::optional<UINT>& as) const -> void {
-  if (HasAny(desc.usage, BufferUsage::kAccelerationStructure)) {
-    as = res_desc_heap_->Allocate();
+// ReSharper disable once CppMemberFunctionMayBeConst
+// Logically not const.
+auto GraphicsDevice::CreateAsDescriptor(D3D12_GPU_VIRTUAL_ADDRESS const gpu_address) -> UINT {
+  auto const srv = res_desc_heap_->Allocate();
 
-    D3D12_SHADER_RESOURCE_VIEW_DESC const srv_desc{
-      .Format = DXGI_FORMAT_UNKNOWN,
-      .ViewDimension = D3D12_SRV_DIMENSION_RAYTRACING_ACCELERATION_STRUCTURE,
-      .Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING,
-      .RaytracingAccelerationStructure = {
-        .Location = buffer.GetGPUVirtualAddress()
-      }
-    };
+  D3D12_SHADER_RESOURCE_VIEW_DESC const srv_desc{
+    .Format = DXGI_FORMAT_UNKNOWN,
+    .ViewDimension = D3D12_SRV_DIMENSION_RAYTRACING_ACCELERATION_STRUCTURE,
+    .Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING,
+    .RaytracingAccelerationStructure = {
+      .Location = gpu_address
+    }
+  };
 
-    device_->CreateShaderResourceView(nullptr, &srv_desc, res_desc_heap_->GetDescriptorCpuHandle(*as));
-  } else {
-    as = std::nullopt;
-  }
+  device_->CreateShaderResourceView(nullptr, &srv_desc, res_desc_heap_->GetDescriptorCpuHandle(srv));
+  return srv;
 }
 
 
