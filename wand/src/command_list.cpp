@@ -91,15 +91,17 @@ auto CommandList::BuildRaytracingAccelerationStructure(
     });
 
   std::ranges::for_each(descs, [this](BuildRaytracingAccelerationStructureDesc const& desc) {
-    assert(HasAny(desc.dst_as->GetDesc().usage, BufferUsage::kAccelerationStructure));
-    GenerateBarrier(*desc.dst_as, D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
-      D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_WRITE);
-
+    // Source first: for an in-place update (src == dst) the tracker must end in the write state so a later read
+    // generates a barrier.
     if (desc.src_as) {
       assert(HasAny(desc.src_as->GetDesc().usage, BufferUsage::kAccelerationStructure));
       GenerateBarrier(*desc.src_as, D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
         D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_READ);
     }
+
+    assert(HasAny(desc.dst_as->GetDesc().usage, BufferUsage::kAccelerationStructure));
+    GenerateBarrier(*desc.dst_as, D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
+      D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_WRITE);
 
     if (desc.scratch_buffer) {
       assert(HasAny(desc.scratch_buffer->GetDesc().usage, BufferUsage::kAccelerationScratch));
