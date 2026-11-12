@@ -8,6 +8,7 @@
 
 #include <wand/acceleration_structure.hpp>
 #include <wand/buffer.hpp>
+#include <wand/buffer_range.hpp>
 #include <wand/buffer_view.hpp>
 #include <wand/pipeline.hpp>
 #include <wand/rt_state_object.hpp>
@@ -32,6 +33,17 @@ struct BuildRaytracingAccelerationStructureDesc {
   D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs;
   AccelerationStructure const* src_as; // Optional, for updates
   std::optional<BufferRange> scratch_buffer;
+};
+
+
+struct DispatchRaysDesc {
+  BufferRange ray_generation_shader_record;
+  std::optional<BufferRange> miss_shader_table;
+  std::optional<BufferRange> hit_group_table;
+  std::optional<BufferRange> callable_shader_table;
+  std::uint32_t width;
+  std::uint32_t height;
+  std::uint32_t depth{1};
 };
 
 
@@ -93,7 +105,7 @@ public:
                     UINT thread_group_count_z) const -> void;
 
   WANDAPI
-  auto DispatchRays(D3D12_DISPATCH_RAYS_DESC const& desc) const -> void;
+  auto DispatchRays(DispatchRaysDesc const& desc) -> void;
 
   WANDAPI
   auto DrawIndexedInstanced(UINT index_count_per_instance, UINT instance_count, UINT start_index_location,

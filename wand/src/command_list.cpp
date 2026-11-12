@@ -265,8 +265,78 @@ auto CommandList::DispatchMesh(UINT const thread_group_count_x, UINT const threa
 }
 
 
-auto CommandList::DispatchRays(D3D12_DISPATCH_RAYS_DESC const& desc) const -> void {
-  cmd_list_->DispatchRays(&desc);
+auto CommandList::DispatchRays(DispatchRaysDesc const& desc) -> void {
+  [[maybe_unused]] auto const is_table_start_aligned = [](BufferRegion const& region) {
+    return region.offset % D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT == 0;
+  };
+
+  [[maybe_unused]] auto const is_table_stride_valid = [](BufferRegion const& region) {
+    return region.stride % D3D12_RAYTRACING_SHADER_RECORD_BYTE_ALIGNMENT == 0 &&
+           region.stride <= D3D12_RAYTRACING_MAX_SHADER_RECORD_STRIDE &&
+           (region.stride == 0 || region.stride >= D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
+  };
+
+  assert(is_table_start_aligned(desc.ray_generation_shader_record.GetRegion()));
+  assert(desc.ray_generation_shader_record.GetRegion().size >= D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
+  assert(desc.ray_generation_shader_record.GetRegion().stride == 0);
+
+  if (desc.miss_shader_table) {
+    assert(is_table_start_aligned(desc.miss_shader_table->GetRegion()));
+    assert(is_table_stride_valid(desc.miss_shader_table->GetRegion()));
+  }
+
+  if (desc.hit_group_table) {
+    assert(is_table_start_aligned(desc.hit_group_table->GetRegion()));
+    assert(is_table_stride_valid(desc.hit_group_table->GetRegion()));
+  }
+
+  if (desc.callable_shader_table) {
+    assert(is_table_start_aligned(desc.callable_shader_table->GetRegion()));
+    assert(is_table_stride_valid(desc.callable_shader_table->GetRegion()));
+  }
+
+  GenerateBarrier(desc.ray_generation_shader_record.GetBuffer(), D3D12_BARRIER_SYNC_RAYTRACING,
+    D3D12_BARRIER_ACCESS_SHADER_RESOURCE);
+
+  if (desc.miss_shader_table) {
+    GenerateBarrier(desc.miss_shader_table->GetBuffer(), D3D12_BARRIER_SYNC_RAYTRACING,
+      D3D12_BARRIER_ACCESS_SHADER_RESOURCE);
+  }
+
+  if (desc.hit_group_table) {
+    GenerateBarrier(desc.hit_group_table->GetBuffer(), D3D12_BARRIER_SYNC_RAYTRACING,
+      D3D12_BARRIER_ACCESS_SHADER_RESOURCE);
+  }
+
+  if (desc.callable_shader_table) {
+    GenerateBarrier(desc.callable_shader_table->GetBuffer(), D3D12_BARRIER_SYNC_RAYTRACING,
+      D3D12_BARRIER_ACCESS_SHADER_RESOURCE);
+  }
+
+  auto const to_shader_table = [](std::optional<BufferRange> const& range) {
+    return range
+             ? D3D12_GPU_VIRTUAL_ADDRESS_RANGE_AND_STRIDE{
+               .StartAddress = detail::GetGpuAddress(*range),
+               .SizeInBytes = range->GetRegion().size,
+               .StrideInBytes = range->GetRegion().stride
+             }
+             : D3D12_GPU_VIRTUAL_ADDRESS_RANGE_AND_STRIDE{};
+  };
+
+  D3D12_DISPATCH_RAYS_DESC const d3d_desc{
+    .RayGenerationShaderRecord = {
+      .StartAddress = detail::GetGpuAddress(desc.ray_generation_shader_record),
+      .SizeInBytes = desc.ray_generation_shader_record.GetRegion().size
+    },
+    .MissShaderTable = to_shader_table(desc.miss_shader_table),
+    .HitGroupTable = to_shader_table(desc.hit_group_table),
+    .CallableShaderTable = to_shader_table(desc.callable_shader_table),
+    .Width = desc.width,
+    .Height = desc.height,
+    .Depth = desc.depth
+  };
+
+  cmd_list_->DispatchRays(&d3d_desc);
 }
 
 
