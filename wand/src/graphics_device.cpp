@@ -43,7 +43,7 @@ namespace {
 auto AsD3d12Desc(BufferDesc const& desc) -> D3D12_RESOURCE_DESC1 {
   auto flags{D3D12_RESOURCE_FLAG_NONE};
 
-  if (!HasAny(desc.usage, BufferUsage::kShaderResource)) {
+  if (!HasAny(desc.usage, BufferUsage::kShaderResource | BufferUsage::kAccelerationStructure)) {
     flags |= D3D12_RESOURCE_FLAG_DENY_SHADER_RESOURCE;
   }
 

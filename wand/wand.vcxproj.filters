@@ -181,7 +181,6 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <None Include="packages.config" />
     <None Include="include\wand\util.inl">
       <Filter>Header Files</Filter>
     </None>
@@ -197,5 +196,6 @@
     <None Include="include\wand\buffer_range.inl">
       <Filter>Header Files</Filter>
     </None>
+    <None Include="packages.config" />
   </ItemGroup>
 </Project>
