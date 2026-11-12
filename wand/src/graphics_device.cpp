@@ -559,17 +559,24 @@ auto GraphicsDevice::CreateBufferView(BufferViewDesc const& desc,
     throw std::runtime_error{"Failed to create buffer view: buffer was null."};
   }
 
-  if (auto const buf_size = buf->GetDesc().size; desc.offset > buf_size || desc.size > buf_size - desc.offset) {
-    throw std::runtime_error{"Failed to create buffer view: buffer too small."};
+  auto const buf_size = buf->GetDesc().size;
+
+  auto const resolved_desc = BufferViewDesc{
+    .region = ResolveRegion(desc.region, buf_size),
+    .usage = desc.usage
+  };
+
+  if (!IsValidRegion(resolved_desc.region, buf_size)) {
+    throw std::runtime_error{"Failed to create buffer view: region is empty or exceeds the buffer."};
   }
 
   std::optional<UINT> cbv;
   std::optional<UINT> srv;
   std::optional<UINT> uav;
-  CreateBufferDescriptors(*buf, desc, cbv, srv, uav);
+  CreateBufferDescriptors(*buf, resolved_desc, cbv, srv, uav);
 
   return SharedDeviceHandle<BufferView>{
-    new BufferView{buf, cbv, srv, uav, desc},
+    new BufferView{buf, cbv, srv, uav, resolved_desc},
     DeviceObjectDeleter<BufferView>{*this}
   };
 }
@@ -906,29 +913,29 @@ auto GraphicsDevice::CreateBufferDescriptors(Buffer const& buffer, BufferViewDes
         };
       }
 
-      if (desc.offset % D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT != 0) {
+      if (desc.region.offset % D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT != 0) {
         throw std::runtime_error{
           std::format("Failed to create constant buffer view: buffer view offset is not multiple of {}.",
             D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT)
         };
       }
 
-      if (desc.size % D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT != 0) {
+      if (desc.region.size % D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT != 0) {
         throw std::runtime_error{
           std::format("Failed to create constant buffer view: buffer view size is not multiple of {}.",
             D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT)
         };
       }
 
-      if (desc.size > D3D12_REQ_CONSTANT_BUFFER_ELEMENT_COUNT * 16 /* sizeof(float4) */) {
+      if (desc.region.size > D3D12_REQ_CONSTANT_BUFFER_ELEMENT_COUNT * 16 /* sizeof(float4) */) {
         throw std::runtime_error{"Failed to create constant buffer view: buffer view size too large."};
       }
 
       cbv = res_desc_heap_->Allocate();
 
       D3D12_CONSTANT_BUFFER_VIEW_DESC const cbv_desc{
-        .BufferLocation = buffer.GetInternalResource()->GetGPUVirtualAddress() + desc.offset,
-        .SizeInBytes = static_cast<UINT>(desc.size)
+        .BufferLocation = buffer.GetInternalResource()->GetGPUVirtualAddress() + desc.region.offset,
+        .SizeInBytes = static_cast<UINT>(desc.region.size)
       };
 
       device_->CreateConstantBufferView(&cbv_desc, res_desc_heap_->GetDescriptorCpuHandle(*cbv));
@@ -943,23 +950,23 @@ auto GraphicsDevice::CreateBufferDescriptors(Buffer const& buffer, BufferViewDes
         };
       }
 
-      if (desc.stride == 0) {
+      if (desc.region.stride == 0) {
         throw std::runtime_error{"Failed to create shader resource view: buffer view does not specify stride."};
       }
 
-      auto const element_size = desc.stride == 1 ? 4u : desc.stride;
+      auto const element_size = desc.region.stride == 1 ? 4u : desc.region.stride;
 
-      if (desc.offset % element_size != 0) {
+      if (desc.region.offset % element_size != 0) {
         throw std::runtime_error{
           "Failed to create shader resource view: buffer view is misaligned for specified stride."
         };
       }
 
-      if (desc.size % element_size != 0) {
+      if (desc.region.size % element_size != 0) {
         throw std::runtime_error{"Failed to create shader resource view: buffer view size is not multiple of stride."};
       }
 
-      auto const element_count = desc.size / element_size;
+      auto const element_count = desc.region.size / element_size;
 
       if (element_count > std::numeric_limits<UINT>::max()) {
         throw std::runtime_error{"Failed to create shader resource view: buffer view defines too many elements."};
@@ -968,14 +975,14 @@ auto GraphicsDevice::CreateBufferDescriptors(Buffer const& buffer, BufferViewDes
       srv = res_desc_heap_->Allocate();
 
       D3D12_SHADER_RESOURCE_VIEW_DESC const srv_desc{
-        .Format = desc.stride == 1 ? DXGI_FORMAT_R32_TYPELESS : DXGI_FORMAT_UNKNOWN,
+        .Format = desc.region.stride == 1 ? DXGI_FORMAT_R32_TYPELESS : DXGI_FORMAT_UNKNOWN,
         .ViewDimension = D3D12_SRV_DIMENSION_BUFFER,
         .Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING,
         .Buffer = {
-          .FirstElement = desc.offset / element_size,
+          .FirstElement = desc.region.offset / element_size,
           .NumElements = static_cast<UINT>(element_count),
-          .StructureByteStride = desc.stride == 1 ? 0 : desc.stride,
-          .Flags = desc.stride == 1 ? D3D12_BUFFER_SRV_FLAG_RAW : D3D12_BUFFER_SRV_FLAG_NONE
+          .StructureByteStride = desc.region.stride == 1 ? 0 : desc.region.stride,
+          .Flags = desc.region.stride == 1 ? D3D12_BUFFER_SRV_FLAG_RAW : D3D12_BUFFER_SRV_FLAG_NONE
         }
       };
 
@@ -992,23 +999,23 @@ auto GraphicsDevice::CreateBufferDescriptors(Buffer const& buffer, BufferViewDes
         };
       }
 
-      if (desc.stride == 0) {
+      if (desc.region.stride == 0) {
         throw std::runtime_error{"Failed to create unordered access view: buffer view does not specify stride."};
       }
 
-      auto const element_size = desc.stride == 1 ? 4u : desc.stride;
+      auto const element_size = desc.region.stride == 1 ? 4u : desc.region.stride;
 
-      if (desc.offset % element_size != 0) {
+      if (desc.region.offset % element_size != 0) {
         throw std::runtime_error{
           "Failed to create unordered access view: buffer view is misaligned for specified stride."
         };
       }
 
-      if (desc.size % element_size != 0) {
+      if (desc.region.size % element_size != 0) {
         throw std::runtime_error{"Failed to create unordered access view: buffer view size is not multiple of stride."};
       }
 
-      auto const element_count = desc.size / element_size;
+      auto const element_count = desc.region.size / element_size;
 
       if (element_count > std::numeric_limits<UINT>::max()) {
         throw std::runtime_error{"Failed to create unordered access view: buffer view defines too many elements."};
@@ -1017,14 +1024,14 @@ auto GraphicsDevice::CreateBufferDescriptors(Buffer const& buffer, BufferViewDes
       uav = res_desc_heap_->Allocate();
 
       D3D12_UNORDERED_ACCESS_VIEW_DESC const uav_desc{
-        .Format = desc.stride == 1 ? DXGI_FORMAT_R32_TYPELESS : DXGI_FORMAT_UNKNOWN,
+        .Format = desc.region.stride == 1 ? DXGI_FORMAT_R32_TYPELESS : DXGI_FORMAT_UNKNOWN,
         .ViewDimension = D3D12_UAV_DIMENSION_BUFFER,
         .Buffer = {
-          .FirstElement = desc.offset / element_size,
+          .FirstElement = desc.region.offset / element_size,
           .NumElements = static_cast<UINT>(element_count),
-          .StructureByteStride = desc.stride == 1 ? 0 : desc.stride,
+          .StructureByteStride = desc.region.stride == 1 ? 0 : desc.region.stride,
           .CounterOffsetInBytes = 0,
-          .Flags = desc.stride == 1 ? D3D12_BUFFER_UAV_FLAG_RAW : D3D12_BUFFER_UAV_FLAG_NONE
+          .Flags = desc.region.stride == 1 ? D3D12_BUFFER_UAV_FLAG_RAW : D3D12_BUFFER_UAV_FLAG_NONE
         }
       };
 

@@ -14,6 +14,11 @@ auto BufferView::GetBuffer() const -> SharedDeviceHandle<Buffer> const& {
 }
 
 
+auto BufferView::GetRegion() const -> BufferRegion const& {
+  return desc_.region;
+}
+
+
 auto BufferView::GetConstantBuffer() const -> UINT {
   return cbv_.value();
 }

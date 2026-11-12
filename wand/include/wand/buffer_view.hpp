@@ -3,6 +3,7 @@
 #include <cstdint>
 
 #include <wand/buffer.hpp>
+#include <wand/buffer_region.hpp>
 #include <wand/device_object.hpp>
 #include <wand/wandapi.hpp>
 
@@ -17,9 +18,7 @@ enum class BufferViewUsage : std::uint32_t {
 
 
 struct BufferViewDesc {
-  std::uint64_t offset;
-  std::uint64_t size;
-  std::uint32_t stride;
+  BufferRegion region;
   BufferViewUsage usage;
 };
 
@@ -31,6 +30,9 @@ public:
 
   [[nodiscard]] WANDAPI
   auto GetBuffer() const -> SharedDeviceHandle<Buffer> const&;
+
+  [[nodiscard]] WANDAPI
+  auto GetRegion() const -> BufferRegion const&;
 
   [[nodiscard]] WANDAPI
   auto GetConstantBuffer() const -> UINT;
