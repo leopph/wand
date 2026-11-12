@@ -17,6 +17,10 @@ auto Fence::GetCompletedValue() const -> UINT64 {
 
 
 auto Fence::Wait(UINT64 const wait_value) const -> void {
+  if (wait_value <= GetCompletedValue()) {
+    return;
+  }
+
   ThrowIfFailed(fence_->SetEventOnCompletion(wait_value, nullptr), "Failed to wait fence from CPU.");
 }
 
