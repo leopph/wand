@@ -343,7 +343,7 @@ auto CommandList::DispatchRays(DispatchRaysDesc const& desc) -> void {
 auto CommandList::DrawIndexedInstanced(UINT const index_count_per_instance, UINT const instance_count,
                                        UINT const start_index_location, INT const base_vertex_location,
                                        UINT const start_instance_location) const -> void {
-  std::array const offsets{*std::bit_cast<UINT const*>(&base_vertex_location), start_instance_location};
+  auto const offsets = std::array{std::bit_cast<UINT const>(base_vertex_location), start_instance_location};
   cmd_list_->SetGraphicsRoot32BitConstants(d3d12::detail::kDrawCallParamsRootIdx, static_cast<UINT>(offsets.size()),
     offsets.data(), 0);
   cmd_list_->DrawIndexedInstanced(index_count_per_instance, instance_count, start_index_location, base_vertex_location,
@@ -353,7 +353,7 @@ auto CommandList::DrawIndexedInstanced(UINT const index_count_per_instance, UINT
 
 auto CommandList::DrawInstanced(UINT const vertex_count_per_instance, UINT const instance_count,
                                 UINT const start_vertex_location, UINT const start_instance_location) const -> void {
-  std::array const offsets{0u, start_instance_location};
+  auto const offsets = std::array{0u, start_instance_location};
   cmd_list_->SetGraphicsRoot32BitConstants(d3d12::detail::kDrawCallParamsRootIdx, static_cast<UINT>(offsets.size()),
     offsets.data(), 0);
   cmd_list_->DrawInstanced(vertex_count_per_instance, instance_count, start_vertex_location, start_instance_location);
