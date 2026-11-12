@@ -104,6 +104,7 @@
     </ClCompile>
     <ClCompile Include="src\buffer_helpers.cpp" />
     <ClCompile Include="src\buffer_view.cpp" />
+    <ClCompile Include="src\detail\as_utils.cpp" />
     <ClCompile Include="src\detail\buffer_utils.cpp" />
     <ClCompile Include="src\command_list_helpers.cpp" />
     <ClCompile Include="src\platforms\detail\d3d12_internals.cpp" />
@@ -133,6 +134,7 @@
     <ClInclude Include="include\wand\buffer_view.hpp" />
     <ClInclude Include="include\wand\command_list.hpp" />
     <ClInclude Include="include\wand\common.hpp" />
+    <ClInclude Include="include\wand\detail\as_utils.hpp" />
     <ClInclude Include="include\wand\detail\buffer_utils.hpp" />
     <ClInclude Include="include\wand\command_list_helpers.hpp" />
     <ClInclude Include="include\wand\flags.hpp" />

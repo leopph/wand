@@ -18,6 +18,7 @@
 #include "wand/flags.hpp"
 #include "wand/format.hpp"
 #include "wand/util.hpp"
+#include "wand/detail/as_utils.hpp"
 #include "wand/detail/buffer_utils.hpp"
 #include "wand/platforms/detail/d3d12_internals.hpp"
 
@@ -883,11 +884,14 @@ auto GraphicsDevice::GetCopyableFootprints(TextureDesc const& desc, UINT const f
 }
 
 
-auto GraphicsDevice::GetRtAccelerationStructurePrebuildInfo(
-  D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS const& inputs) const ->
-  D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO {
-  D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO info;
-  device_->GetRaytracingAccelerationStructurePrebuildInfo(&inputs, &info);
+auto GraphicsDevice::GetAccelerationStructurePrebuildInfo(
+  BuildAccelerationStructureInputs const& inputs
+) const -> D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO {
+  auto geometry_storage = std::vector<D3D12_RAYTRACING_GEOMETRY_DESC>{};
+  auto const d3d_inputs = detail::ToD3D12(inputs, geometry_storage);
+
+  auto info = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO{};
+  device_->GetRaytracingAccelerationStructurePrebuildInfo(&d3d_inputs, &info);
   return info;
 }
 

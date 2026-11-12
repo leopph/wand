@@ -156,9 +156,9 @@ public:
                              UINT* row_counts, UINT64* row_sizes, UINT64* total_size) const -> void;
 
   [[nodiscard]] WANDAPI
-  auto GetRtAccelerationStructurePrebuildInfo(
-    D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS const& inputs) const ->
-    D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO;
+  auto GetAccelerationStructurePrebuildInfo(
+    BuildAccelerationStructureInputs const& inputs
+  ) const -> D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO;
 
 private:
   auto SwapChainCreateTextures(SwapChain& swap_chain) -> void;

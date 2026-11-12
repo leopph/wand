@@ -5,6 +5,7 @@
 #include <optional>
 #include <span>
 #include <string_view>
+#include <variant>
 
 #include <wand/acceleration_structure.hpp>
 #include <wand/buffer.hpp>
@@ -28,9 +29,34 @@ struct PendingBarrier {
 }
 
 
-struct BuildRaytracingAccelerationStructureDesc {
+struct TriangleGeometry {
+  BufferRange vertices;
+  DXGI_FORMAT vertex_format;
+  std::optional<BufferRange> indices;
+  DXGI_FORMAT index_format;
+  std::optional<BufferRange> transform;
+  D3D12_RAYTRACING_GEOMETRY_FLAGS flags;
+};
+
+
+struct BuildBottomLevelAsInputs {
+  std::span<TriangleGeometry const> geometries;
+  D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS flags;
+};
+
+
+struct BuildTopLevelAsInputs {
+  BufferRange instances;
+  D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS flags;
+};
+
+
+using BuildAccelerationStructureInputs = std::variant<BuildBottomLevelAsInputs, BuildTopLevelAsInputs>;
+
+
+struct BuildAccelerationStructureDesc {
   std::reference_wrapper<AccelerationStructure const> dst_as;
-  D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs;
+  BuildAccelerationStructureInputs inputs;
   AccelerationStructure const* src_as; // Optional, for updates
   std::optional<BufferRange> scratch_buffer;
 };
@@ -62,7 +88,7 @@ public:
   auto EndEvent() -> void;
 
   WANDAPI
-  auto BuildRaytracingAccelerationStructure(BuildRaytracingAccelerationStructureDesc const& desc) -> void;
+  auto BuildAccelerationStructure(BuildAccelerationStructureDesc const& desc) -> void;
 
   WANDAPI
   auto ClearDepthStencil(Texture const& tex, D3D12_CLEAR_FLAGS clear_flags, FLOAT depth, UINT8 stencil,

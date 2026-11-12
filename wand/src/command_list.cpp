@@ -9,6 +9,8 @@
 
 #include "wand/common.hpp"
 #include "wand/flags.hpp"
+#include "wand/util.hpp"
+#include "wand/detail/as_utils.hpp"
 #include "wand/detail/buffer_utils.hpp"
 #include "wand/platforms/detail/d3d12_internals.hpp"
 
@@ -19,20 +21,6 @@ namespace wand {
 namespace {
 constexpr auto kSealedLayout = D3D12_BARRIER_LAYOUT_DIRECT_QUEUE_SHADER_RESOURCE;
 constexpr auto kMaxEvenNameLength = 30uz;
-
-
-[[nodiscard]] [[maybe_unused]]
-auto ToD3D12(AccelerationStructureType const type) -> D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE {
-  switch (type) {
-    case AccelerationStructureType::kBottomLevel:
-      return D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL;
-    case AccelerationStructureType::kTopLevel:
-      return D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL;
-  }
-
-  assert(false && "Unhandled acceleration structure type");
-  std::unreachable();
-}
 }
 
 
@@ -87,26 +75,35 @@ auto CommandList::EndEvent() -> void {
 }
 
 
-auto CommandList::BuildRaytracingAccelerationStructure(BuildRaytracingAccelerationStructureDesc const& desc) -> void {
+auto CommandList::BuildAccelerationStructure(BuildAccelerationStructureDesc const& desc) -> void {
+  auto geometry_storage = std::vector<D3D12_RAYTRACING_GEOMETRY_DESC>{};
+  auto const d3d_inputs = detail::ToD3D12(desc.inputs, geometry_storage);
+
 #ifndef NDEBUG
   {
     ComPtr<ID3D12Device5> device;
     ThrowIfFailed(cmd_list_->GetDevice(IID_PPV_ARGS(&device)), "Failed to get device.");
     D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO info;
-    device->GetRaytracingAccelerationStructurePrebuildInfo(&desc.inputs, &info);
+    device->GetRaytracingAccelerationStructurePrebuildInfo(&d3d_inputs, &info);
 
     assert(desc.dst_as.get().GetRegion().size >= info.ResultDataMaxSizeInBytes && "Build AS destination too small.");
 
-    auto const is_update = (desc.inputs.Flags & D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PERFORM_UPDATE) != 0;
+    auto const is_update = (std::visit([](auto const& in) { return in.flags; }, desc.inputs) &
+                            D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PERFORM_UPDATE) != 0;
     auto const needed_scratch_size = is_update ? info.UpdateScratchDataSizeInBytes : info.ScratchDataSizeInBytes;
+    assert((desc.src_as != nullptr) == is_update && "Source AS and update flag must be passed together.");
     assert(
-      (needed_scratch_size == 0 || (desc.scratch_buffer && desc.scratch_buffer->GetRegion().size >= needed_scratch_size)
+      (needed_scratch_size == 0 || (desc.scratch_buffer && desc.scratch_buffer->GetRegion().size >=
+          needed_scratch_size)
       ) && "Build AS scratch buffer too small.");
   }
 #endif
 
-  assert(desc.inputs.Type == ToD3D12(desc.dst_as.get().GetDesc().type) &&
-    "AS build input type must match destination type.");
+  assert(
+    ((std::holds_alternative<BuildBottomLevelAsInputs>(desc.inputs) && desc.dst_as.get().GetDesc().type ==
+        AccelerationStructureType::kBottomLevel) ||
+      (std::holds_alternative<BuildTopLevelAsInputs>(desc.inputs) && desc.dst_as.get().GetDesc().type ==
+        AccelerationStructureType::kTopLevel)) && "AS build input type must match destination type.");
 
   // Source first: for an in-place update (src == dst) the tracker must end in the write state so a later read
   // generates a barrier.
@@ -116,6 +113,29 @@ auto CommandList::BuildRaytracingAccelerationStructure(BuildRaytracingAccelerati
     GenerateBarrier(*desc.src_as->GetBuffer(), D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
       D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_READ);
   }
+
+  std::visit(Overloaded{
+    [this](BuildBottomLevelAsInputs const& in) {
+      for (auto const& geom : in.geometries) {
+        GenerateBarrier(geom.vertices.GetBuffer(), D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
+          D3D12_BARRIER_ACCESS_SHADER_RESOURCE);
+
+        if (geom.indices) {
+          GenerateBarrier(geom.indices->GetBuffer(), D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
+            D3D12_BARRIER_ACCESS_SHADER_RESOURCE);
+        }
+
+        if (geom.transform) {
+          GenerateBarrier(geom.transform->GetBuffer(), D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
+            D3D12_BARRIER_ACCESS_SHADER_RESOURCE);
+        }
+      }
+    },
+    [this](BuildTopLevelAsInputs const& in) {
+      GenerateBarrier(in.instances.GetBuffer(), D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
+        D3D12_BARRIER_ACCESS_SHADER_RESOURCE);
+    }
+  }, desc.inputs);
 
   GenerateBarrier(*desc.dst_as.get().GetBuffer(), D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
     D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_WRITE);
@@ -128,9 +148,9 @@ auto CommandList::BuildRaytracingAccelerationStructure(BuildRaytracingAccelerati
       D3D12_BARRIER_ACCESS_UNORDERED_ACCESS);
   }
 
-  D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC const d3d_desc{
+  auto const d3d_desc = D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC{
     .DestAccelerationStructureData = desc.dst_as.get().GetGpuAddress(),
-    .Inputs = desc.inputs,
+    .Inputs = d3d_inputs,
     .SourceAccelerationStructureData = desc.src_as
                                          ? desc.src_as->GetGpuAddress()
                                          : 0,
