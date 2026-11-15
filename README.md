@@ -107,6 +107,8 @@ This example creates two buffers, records a copy, and submits it to the GPU. In 
 
 Sorcery includes Wand as a Git submodule and references its Visual Studio project. Its rendering code provides a larger, real-world example of how Wand can be integrated into a renderer.
 
+**[tracy](https://github.com/leopph/tracy)** is my hobby GPU path tracer built on Wand. It uses inline ray tracing (`RayQuery`) in a compute shader, together with Wand's acceleration-structure builds and bindless resource binding. Being a single small application, it's a compact example of Wand's raytracing API in use.
+
 ## Current limitations
 
 - **D3D12 only:** there is no Vulkan or other backend yet.
