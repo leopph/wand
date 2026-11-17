@@ -124,22 +124,22 @@ public:
 
   WANDAPI
   auto Dispatch(UINT thread_group_count_x, UINT thread_group_count_y,
-                UINT thread_group_count_z) const -> void;
+                UINT thread_group_count_z) -> void;
 
   WANDAPI
   auto DispatchMesh(UINT thread_group_count_x, UINT thread_group_count_y,
-                    UINT thread_group_count_z) const -> void;
+                    UINT thread_group_count_z) -> void;
 
   WANDAPI
   auto DispatchRays(DispatchRaysDesc const& desc) -> void;
 
   WANDAPI
   auto DrawIndexedInstanced(UINT index_count_per_instance, UINT instance_count, UINT start_index_location,
-                            INT base_vertex_location, UINT start_instance_location) const -> void;
+                            INT base_vertex_location, UINT start_instance_location) -> void;
 
   WANDAPI
   auto DrawInstanced(UINT vertex_count_per_instance, UINT instance_count, UINT start_vertex_location,
-                     UINT start_instance_location) const -> void;
+                     UINT start_instance_location) -> void;
 
   WANDAPI
   auto Resolve(Texture const& dst, Texture const& src, DXGI_FORMAT format) -> void;
@@ -220,6 +220,7 @@ private:
   auto GenerateBarrier(Buffer const& buf, D3D12_BARRIER_SYNC sync, D3D12_BARRIER_ACCESS access) -> void;
   auto GenerateBarrier(Texture const& tex, D3D12_BARRIER_SYNC sync, D3D12_BARRIER_ACCESS access,
                        D3D12_BARRIER_LAYOUT layout) -> void;
+  auto RecordBarriers() -> void;
 
   Microsoft::WRL::ComPtr<ID3D12CommandAllocator> allocator_;
   Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList7> cmd_list_;
@@ -227,6 +228,8 @@ private:
   std::vector<details::PendingBarrier> pending_barriers_;
   std::vector<Resource const*> sealed_in_list_;
   std::vector<Texture const*> textures_to_seal_;
+  std::vector<D3D12_BUFFER_BARRIER> buffer_barriers_;
+  std::vector<D3D12_TEXTURE_BARRIER> texture_barriers_;
   detail::DescriptorHeap const* dsv_heap_;
   detail::DescriptorHeap const* rtv_heap_;
   detail::DescriptorHeap const* res_desc_heap_;

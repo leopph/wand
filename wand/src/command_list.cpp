@@ -36,6 +36,8 @@ auto CommandList::Begin(PipelineState const* pipeline_state) -> void {
   pending_barriers_.clear();
   sealed_in_list_.clear();
   textures_to_seal_.clear();
+  buffer_barriers_.clear();
+  texture_barriers_.clear();
 
 #ifndef NDEBUG
   event_depth_ = 0;
@@ -47,6 +49,9 @@ auto CommandList::End() -> void {
   for (auto const* const tex : textures_to_seal_) {
     GenerateBarrier(*tex, D3D12_BARRIER_SYNC_NONE, D3D12_BARRIER_ACCESS_NO_ACCESS, kSealedLayout);
   }
+
+  RecordBarriers();
+
   assert(event_depth_ == 0 && "CommandList::End before EndEvent");
   ThrowIfFailed(cmd_list_->Close(), "Failed to close command list.");
 }
@@ -148,6 +153,8 @@ auto CommandList::BuildAccelerationStructure(BuildAccelerationStructureDesc cons
       D3D12_BARRIER_ACCESS_UNORDERED_ACCESS);
   }
 
+  RecordBarriers();
+
   auto const d3d_desc = D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC{
     .DestAccelerationStructureData = desc.dst_as.get().GetGpuAddress(),
     .Inputs = d3d_inputs,
@@ -168,6 +175,7 @@ auto CommandList::ClearDepthStencil(Texture const& tex, D3D12_CLEAR_FLAGS const 
                                     UINT16 const mip_level) -> void {
   GenerateBarrier(tex, D3D12_BARRIER_SYNC_DEPTH_STENCIL, D3D12_BARRIER_ACCESS_DEPTH_STENCIL_WRITE,
     D3D12_BARRIER_LAYOUT_DEPTH_STENCIL_WRITE);
+  RecordBarriers();
 
   cmd_list_->ClearDepthStencilView(dsv_heap_->GetDescriptorCpuHandle(tex.GetDepthStencilView(mip_level)), clear_flags,
     depth, stencil,
@@ -179,6 +187,7 @@ auto CommandList::ClearRenderTarget(Texture const& tex, std::span<FLOAT const, 4
                                     std::span<D3D12_RECT const> const rects, UINT16 const mip_level) -> void {
   GenerateBarrier(tex, D3D12_BARRIER_SYNC_RENDER_TARGET, D3D12_BARRIER_ACCESS_RENDER_TARGET,
     D3D12_BARRIER_LAYOUT_RENDER_TARGET);
+  RecordBarriers();
 
   cmd_list_->ClearRenderTargetView(rtv_heap_->GetDescriptorCpuHandle(tex.GetRenderTargetView(mip_level)),
     color_rgba.data(),
@@ -192,6 +201,7 @@ auto CommandList::CopyBuffer(Buffer const& dst, Buffer const& src) -> void {
 
   GenerateBarrier(src, D3D12_BARRIER_SYNC_COPY, D3D12_BARRIER_ACCESS_COPY_SOURCE);
   GenerateBarrier(dst, D3D12_BARRIER_SYNC_COPY, D3D12_BARRIER_ACCESS_COPY_DEST);
+  RecordBarriers();
 
   cmd_list_->CopyResource(dst.GetInternalResource(), src.GetInternalResource());
 }
@@ -204,6 +214,7 @@ auto CommandList::CopyBufferRegion(Buffer const& dst, UINT64 const dst_offset, B
 
   GenerateBarrier(src, D3D12_BARRIER_SYNC_COPY, D3D12_BARRIER_ACCESS_COPY_SOURCE);
   GenerateBarrier(dst, D3D12_BARRIER_SYNC_COPY, D3D12_BARRIER_ACCESS_COPY_DEST);
+  RecordBarriers();
 
   cmd_list_->CopyBufferRegion(dst.GetInternalResource(), dst_offset, src.GetInternalResource(), src_offset, num_bytes);
 }
@@ -214,6 +225,8 @@ auto CommandList::CopyTexture(Texture const& dst, Texture const& src) -> void {
     D3D12_BARRIER_LAYOUT_DIRECT_QUEUE_COPY_SOURCE);
   GenerateBarrier(dst, D3D12_BARRIER_SYNC_COPY, D3D12_BARRIER_ACCESS_COPY_DEST,
     D3D12_BARRIER_LAYOUT_DIRECT_QUEUE_COPY_DEST);
+  RecordBarriers();
+
   cmd_list_->CopyResource(dst.GetInternalResource(), src.GetInternalResource());
 }
 
@@ -225,6 +238,7 @@ auto CommandList::CopyTextureRegion(Texture const& dst, UINT const dst_subresour
     D3D12_BARRIER_LAYOUT_DIRECT_QUEUE_COPY_SOURCE);
   GenerateBarrier(dst, D3D12_BARRIER_SYNC_COPY, D3D12_BARRIER_ACCESS_COPY_DEST,
     D3D12_BARRIER_LAYOUT_DIRECT_QUEUE_COPY_DEST);
+  RecordBarriers();
 
   D3D12_TEXTURE_COPY_LOCATION const dst_loc{
     .pResource = dst.GetInternalResource(), .Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX,
@@ -246,6 +260,7 @@ auto CommandList::CopyTextureRegion(Texture const& dst, UINT const dst_subresour
   GenerateBarrier(src, D3D12_BARRIER_SYNC_COPY, D3D12_BARRIER_ACCESS_COPY_SOURCE);
   GenerateBarrier(dst, D3D12_BARRIER_SYNC_COPY, D3D12_BARRIER_ACCESS_COPY_DEST,
     D3D12_BARRIER_LAYOUT_DIRECT_QUEUE_COPY_DEST);
+  RecordBarriers();
 
   D3D12_TEXTURE_COPY_LOCATION const dst_loc{
     .pResource = dst.GetInternalResource(), .Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX,
@@ -262,6 +277,7 @@ auto CommandList::CopyTextureRegion(Texture const& dst, UINT const dst_subresour
 auto CommandList::DiscardRenderTarget(Texture const& tex, std::optional<D3D12_DISCARD_REGION> const& region) -> void {
   GenerateBarrier(tex, D3D12_BARRIER_SYNC_RENDER_TARGET, D3D12_BARRIER_ACCESS_RENDER_TARGET,
     D3D12_BARRIER_LAYOUT_RENDER_TARGET);
+  RecordBarriers();
   cmd_list_->DiscardResource(tex.GetInternalResource(), region ? &*region : nullptr);
 }
 
@@ -269,18 +285,21 @@ auto CommandList::DiscardRenderTarget(Texture const& tex, std::optional<D3D12_DI
 auto CommandList::DiscardDepthStencil(Texture const& tex, std::optional<D3D12_DISCARD_REGION> const& region) -> void {
   GenerateBarrier(tex, D3D12_BARRIER_SYNC_DEPTH_STENCIL, D3D12_BARRIER_ACCESS_DEPTH_STENCIL_WRITE,
     D3D12_BARRIER_LAYOUT_DEPTH_STENCIL_WRITE);
+  RecordBarriers();
   cmd_list_->DiscardResource(tex.GetInternalResource(), region ? &*region : nullptr);
 }
 
 
 auto CommandList::Dispatch(UINT const thread_group_count_x, UINT const thread_group_count_y,
-                           UINT const thread_group_count_z) const -> void {
+                           UINT const thread_group_count_z) -> void {
+  RecordBarriers();
   cmd_list_->Dispatch(thread_group_count_x, thread_group_count_y, thread_group_count_z);
 }
 
 
 auto CommandList::DispatchMesh(UINT const thread_group_count_x, UINT const thread_group_count_y,
-                               UINT const thread_group_count_z) const -> void {
+                               UINT const thread_group_count_z) -> void {
+  RecordBarriers();
   cmd_list_->DispatchMesh(thread_group_count_x, thread_group_count_y, thread_group_count_z);
 }
 
@@ -333,6 +352,8 @@ auto CommandList::DispatchRays(DispatchRaysDesc const& desc) -> void {
       D3D12_BARRIER_ACCESS_SHADER_RESOURCE);
   }
 
+  RecordBarriers();
+
   auto const to_shader_table = [](std::optional<BufferRange> const& range) {
     return range
              ? D3D12_GPU_VIRTUAL_ADDRESS_RANGE_AND_STRIDE{
@@ -362,7 +383,9 @@ auto CommandList::DispatchRays(DispatchRaysDesc const& desc) -> void {
 
 auto CommandList::DrawIndexedInstanced(UINT const index_count_per_instance, UINT const instance_count,
                                        UINT const start_index_location, INT const base_vertex_location,
-                                       UINT const start_instance_location) const -> void {
+                                       UINT const start_instance_location) -> void {
+  RecordBarriers();
+
   auto const offsets = std::array{std::bit_cast<UINT const>(base_vertex_location), start_instance_location};
   cmd_list_->SetGraphicsRoot32BitConstants(d3d12::detail::kDrawCallParamsRootIdx, static_cast<UINT>(offsets.size()),
     offsets.data(), 0);
@@ -372,7 +395,9 @@ auto CommandList::DrawIndexedInstanced(UINT const index_count_per_instance, UINT
 
 
 auto CommandList::DrawInstanced(UINT const vertex_count_per_instance, UINT const instance_count,
-                                UINT const start_vertex_location, UINT const start_instance_location) const -> void {
+                                UINT const start_vertex_location, UINT const start_instance_location) -> void {
+  RecordBarriers();
+
   auto const offsets = std::array{0u, start_instance_location};
   cmd_list_->SetGraphicsRoot32BitConstants(d3d12::detail::kDrawCallParamsRootIdx, static_cast<UINT>(offsets.size()),
     offsets.data(), 0);
@@ -385,6 +410,7 @@ auto CommandList::Resolve(Texture const& dst, Texture const& src, DXGI_FORMAT co
     D3D12_BARRIER_LAYOUT_RESOLVE_SOURCE);
   GenerateBarrier(dst, D3D12_BARRIER_SYNC_RESOLVE, D3D12_BARRIER_ACCESS_RESOLVE_DEST,
     D3D12_BARRIER_LAYOUT_RESOLVE_DEST);
+  RecordBarriers();
   cmd_list_->ResolveSubresource(dst.GetInternalResource(), 0, src.GetInternalResource(), 0, format);
 }
 
@@ -636,7 +662,7 @@ auto CommandList::GenerateBarrier(Buffer const& buf, D3D12_BARRIER_SYNC const sy
   // Either the previous access was a write or the current access is a write, so we're placing a barrier.
   // There are some special cases that allow parallel reading and writing, but we don't support those here.
 
-  D3D12_BUFFER_BARRIER const barrier{
+  auto const barrier = D3D12_BUFFER_BARRIER{
     .SyncBefore = local_state->accum_sync,
     .SyncAfter = sync,
     .AccessBefore = local_state->accum_access,
@@ -646,13 +672,7 @@ auto CommandList::GenerateBarrier(Buffer const& buf, D3D12_BARRIER_SYNC const sy
     .Size = UINT64_MAX
   };
 
-  D3D12_BARRIER_GROUP const group{
-    .Type = D3D12_BARRIER_TYPE_BUFFER,
-    .NumBarriers = 1,
-    .pBufferBarriers = &barrier
-  };
-
-  cmd_list_->Barrier(1, &group);
+  buffer_barriers_.emplace_back(barrier);
 
   *local_state = {
     .accum_sync = sync,
@@ -707,7 +727,7 @@ auto CommandList::GenerateBarrier(Texture const& tex, D3D12_BARRIER_SYNC const s
     return;
   }
 
-  D3D12_TEXTURE_BARRIER const barrier{
+  auto const barrier = D3D12_TEXTURE_BARRIER{
     .SyncBefore = local_state->accum_sync,
     .SyncAfter = sync,
     .AccessBefore = local_state->accum_access,
@@ -722,18 +742,40 @@ auto CommandList::GenerateBarrier(Texture const& tex, D3D12_BARRIER_SYNC const s
     .Flags = D3D12_TEXTURE_BARRIER_FLAG_NONE
   };
 
-  D3D12_BARRIER_GROUP const group{
-    .Type = D3D12_BARRIER_TYPE_TEXTURE,
-    .NumBarriers = 1,
-    .pTextureBarriers = &barrier
-  };
-
-  cmd_list_->Barrier(1, &group);
+  texture_barriers_.emplace_back(barrier);
 
   *local_state = {
     .accum_sync = sync,
     .accum_access = access,
     .layout = layout
   };
+}
+
+
+auto CommandList::RecordBarriers() -> void {
+  auto groups = std::array<D3D12_BARRIER_GROUP, 2>{};
+  auto group_count = UINT32{0};
+
+  if (!buffer_barriers_.empty()) {
+    groups[group_count++] = D3D12_BARRIER_GROUP{
+      .Type = D3D12_BARRIER_TYPE_BUFFER,
+      .NumBarriers = static_cast<UINT32>(buffer_barriers_.size()),
+      .pBufferBarriers = buffer_barriers_.data()
+    };
+  }
+
+  if (!texture_barriers_.empty()) {
+    groups[group_count++] = D3D12_BARRIER_GROUP{
+      .Type = D3D12_BARRIER_TYPE_TEXTURE,
+      .NumBarriers = static_cast<UINT32>(texture_barriers_.size()),
+      .pTextureBarriers = texture_barriers_.data()
+    };
+  }
+
+  if (group_count > 0) {
+    cmd_list_->Barrier(group_count, groups.data());
+    buffer_barriers_.clear();
+    texture_barriers_.clear();
+  }
 }
 }
