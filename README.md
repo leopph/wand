@@ -21,12 +21,32 @@ Wand uses **bindless resource binding** through D3D12's directly indexed resourc
 
 Each pipeline receives a block of 32-bit root constants for shader parameters. These can hold ordinary draw parameters or indices into the descriptor heaps. Instead of preparing descriptor tables for each draw, you pass resource indices through this parameter block and access the descriptors directly in HLSL.
 
-For example, given a pipeline with two 32-bit parameters, the C++ side can bind a texture and a sampler:
+For example, a pipeline that samples a texture can describe its parameters with a struct that mirrors the HLSL one below:
 
 ```cpp
-cmd.SetShaderResource(0, texture);           // Constant slot 0: texture descriptor index
-cmd.SetPipelineParameter(1, sampler.Get());  // Constant slot 1: sampler descriptor index
+struct DrawParams {
+    UINT textureIndex;
+    UINT samplerIndex;
+};
 ```
+
+The C++ side can then set the parameters one at a time:
+
+```cpp
+cmd.SetShaderResource(WAND_PARAM(DrawParams, textureIndex), texture);
+cmd.SetPipelineParameter(WAND_PARAM(DrawParams, samplerIndex), sampler.Get());
+```
+
+or the whole block at once:
+
+```cpp
+cmd.SetPipelineParameter(wand::ParamField<DrawParams>{}, {
+    .textureIndex = cmd.ReferenceShaderResource(texture),
+    .samplerIndex = sampler.Get()
+});
+```
+
+`WAND_PARAM(Block, member)` refers to a member's position in the parameter block together with its type, so a value of the wrong type does not compile. `wand::ParamField<Block>{}` refers to the whole block.
 
 The corresponding HLSL parameters and resource lookup are:
 
@@ -45,7 +65,7 @@ float4 SampleTexture(float2 uv) {
 }
 ```
 
-`SetShaderResource`, `SetConstantBuffer`, and `SetUnorderedAccess` also tell Wand how the bound resource is accessed, allowing it to track state and insert necessary barriers. `SetPipelineParameter` and `SetPipelineParameters` can be used for other 32-bit values, including sampler indices.
+`SetShaderResource`, `SetUnorderedAccess`, `SetConstantBuffer`, and `SetAccelerationStructure` write a resource's descriptor index into a parameter and also tell Wand how the resource is accessed, allowing it to track state and insert necessary barriers. Their `Reference*` counterparts do the same but return the index instead, for filling in a whole parameter block. `SetPipelineParameter` sets any other value, such as a sampler index, a float, or a whole struct, and `SetPipelineParameters` takes raw 32-bit values.
 
 **Important:** when shaders obtain descriptor indices indirectly (for example, from a material buffer), Wand cannot automatically infer those resource accesses from the shader. Automatic state tracking applies to accesses Wand sees through its commands.
 
