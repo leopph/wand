@@ -208,10 +208,10 @@ private:
   UINT present_flags_{0};
 
   SharedDeviceHandle<Fence> idle_fence_;
-  SharedDeviceHandle<Fence> execute_barrier_fence_;
+  SharedDeviceHandle<Fence> inital_layout_fence_;
 
   mutable std::mutex queue_submission_mutex_;
-  std::vector<details::ExecuteBarrierCmdListRecord> execute_barrier_cmd_lists_;
+  std::vector<details::ExecuteBarrierCmdListRecord> layout_cmd_lists_;
 
   CD3DX12FeatureSupport supported_features_;
 };

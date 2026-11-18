@@ -220,7 +220,7 @@ GraphicsDevice::GraphicsDevice(bool const enable_debug, bool const use_sw_render
   }
 
   idle_fence_ = CreateFence(0);
-  execute_barrier_fence_ = CreateFence(0);
+  inital_layout_fence_ = CreateFence(0);
 }
 
 
@@ -789,7 +789,7 @@ auto GraphicsDevice::ExecuteCommandLists(std::span<CommandList const> const cmd_
       layout_cmd.End();
       queue_->ExecuteCommandLists(1,
         std::array{static_cast<ID3D12CommandList*>(layout_cmd.cmd_list_.Get())}.data());
-      SignalFenceUnlocked(*execute_barrier_fence_);
+      SignalFenceUnlocked(*inital_layout_fence_);
     }
 
     queue_->ExecuteCommandLists(1, CommandListCast(cmd_list.cmd_list_.GetAddressOf()));
@@ -858,7 +858,7 @@ auto GraphicsDevice::Present(SwapChain const& swap_chain) -> void {
     cmd_list.End();
 
     queue_->ExecuteCommandLists(1, std::array{static_cast<ID3D12CommandList*>(cmd_list.cmd_list_.Get())}.data());
-    SignalFenceUnlocked(*execute_barrier_fence_);
+    SignalFenceUnlocked(*inital_layout_fence_);
   }
 
   ThrowIfFailed(swap_chain.swap_chain_->Present(swap_chain.GetSyncInterval(), present_flags_),
@@ -1349,17 +1349,17 @@ auto GraphicsDevice::SignalFenceUnlocked(Fence& fence) const -> UINT64 {
 
 
 auto GraphicsDevice::AcquireLayoutCmdList() -> CommandList& {
-  auto const completed_fence_val{execute_barrier_fence_->GetCompletedValue()};
-  auto const next_fence_val{execute_barrier_fence_->GetNextValue()};
+  auto const completed_fence_val{inital_layout_fence_->GetCompletedValue()};
+  auto const next_fence_val{inital_layout_fence_->GetNextValue()};
 
-  for (std::size_t i{0}; i < execute_barrier_cmd_lists_.size(); i++) {
-    if (execute_barrier_cmd_lists_[i].fence_completion_val <= completed_fence_val) {
-      execute_barrier_cmd_lists_[i].fence_completion_val = next_fence_val;
-      return *execute_barrier_cmd_lists_[i].cmd_list;
+  for (std::size_t i{0}; i < layout_cmd_lists_.size(); i++) {
+    if (layout_cmd_lists_[i].fence_completion_val <= completed_fence_val) {
+      layout_cmd_lists_[i].fence_completion_val = next_fence_val;
+      return *layout_cmd_lists_[i].cmd_list;
     }
   }
 
-  return *execute_barrier_cmd_lists_.emplace_back(CreateCommandList(), next_fence_val).cmd_list;
+  return *layout_cmd_lists_.emplace_back(CreateCommandList(), next_fence_val).cmd_list;
 }
 
 
