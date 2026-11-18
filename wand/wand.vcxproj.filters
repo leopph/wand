@@ -179,6 +179,9 @@
     <ClInclude Include="include\wand\detail\as_utils.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="include\wand\pipeline_parameter.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="include\wand\util.inl">
@@ -197,5 +200,11 @@
       <Filter>Header Files</Filter>
     </None>
     <None Include="packages.config" />
+    <None Include="include\wand\pipeline_parameter.inl">
+      <Filter>Header Files</Filter>
+    </None>
+    <None Include="include\wand\command_list.inl">
+      <Filter>Header Files</Filter>
+    </None>
   </ItemGroup>
 </Project>

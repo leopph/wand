@@ -138,6 +138,7 @@
     <ClInclude Include="include\wand\command_list_helpers.hpp" />
     <ClInclude Include="include\wand\flags.hpp" />
     <ClInclude Include="include\wand\graphics_device.hpp" />
+    <ClInclude Include="include\wand\pipeline_parameter.hpp" />
     <ClInclude Include="include\wand\platforms\detail\d3d12_internals.hpp" />
     <ClInclude Include="include\wand\detail\descriptor_heap.hpp" />
     <ClInclude Include="include\wand\device_object.hpp" />
@@ -160,8 +161,10 @@
   <ItemGroup>
     <None Include="include\wand\buffer_range.inl" />
     <None Include="include\wand\buffer_region.inl" />
+    <None Include="include\wand\command_list.inl" />
     <None Include="include\wand\flags.inl" />
     <None Include="include\wand\detail\resource_state_tracker.inl" />
+    <None Include="include\wand\pipeline_parameter.inl" />
     <None Include="include\wand\util.inl" />
     <None Include="packages.config" />
   </ItemGroup>

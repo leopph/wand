@@ -12,6 +12,7 @@
 #include <wand/buffer_range.hpp>
 #include <wand/buffer_view.hpp>
 #include <wand/pipeline.hpp>
+#include <wand/pipeline_parameter.hpp>
 #include <wand/rt_state_object.hpp>
 #include <wand/texture.hpp>
 #include <wand/wandapi.hpp>
@@ -173,39 +174,53 @@ public:
   auto SetViewports(std::span<D3D12_VIEWPORT const> viewports) const -> void;
 
   WANDAPI
-  auto SetPipelineParameter(UINT index, UINT value) const -> void;
+  auto SetPipelineParameters(UINT index, UINT count, void const* params) const -> void;
 
-  WANDAPI
-  auto SetPipelineParameters(UINT index, std::span<UINT const> values) const -> void;
+
+  template<class T>
+  auto SetPipelineParameter(ParamField<T> field, std::type_identity_t<T> const& value) const -> void;
 
   /* A resource bound with SetShaderResource, SetUnorderedAccess, SetConstantBuffer, SetAccelerationStructure,
-   * SetIndexBuffer or SetRenderTargets stays valid for subsequent draws and dispatches only as long as the command
-   * list does nothing else with that resource. Copies, clears, discards, resolves, acceleration-structure builds and
-   * Use* on it invalidate the binding: bind it again before the next draw or dispatch that uses it. */
+   * SetIndexBuffer or SetRenderTargets, or referenced with ReferenceConstantBuffer, ReferenceShaderResource,
+   * ReferenceUnorderedAccess or ReferenceAccelerationStructure stays valid for subsequent draws and dispatches only as
+   * long as the command list does nothing else with that resource. Copies, clears, discards, resolves, acceleration
+   * structure builds and Use* on it invalidate the binding: bind it again before the next draw or dispatch that uses it. */
 
   WANDAPI
-  auto SetConstantBuffer(UINT param_idx, BufferView const& buf_view) -> void;
+  auto SetConstantBuffer(ParamField<UINT> field, BufferView const& buf_view) -> void;
 
   WANDAPI
-  auto SetShaderResource(UINT param_idx, BufferView const& buf_view) -> void;
+  auto SetShaderResource(ParamField<UINT> field, BufferView const& buf_view) -> void;
 
   WANDAPI
-  auto SetShaderResource(UINT param_idx, Texture const& tex) -> void;
+  auto SetShaderResource(ParamField<UINT> field, Texture const& tex) -> void;
 
   WANDAPI
-  auto SetUnorderedAccess(UINT param_idx, BufferView const& buf_view) -> void;
+  auto SetUnorderedAccess(ParamField<UINT> field, BufferView const& buf_view) -> void;
 
   WANDAPI
-  auto SetUnorderedAccess(UINT param_idx, Texture const& tex) -> void;
+  auto SetUnorderedAccess(ParamField<UINT> field, Texture const& tex) -> void;
 
   WANDAPI
-  auto SetAccelerationStructure(UINT param_idx, AccelerationStructure const& as) -> void;
+  auto SetAccelerationStructure(ParamField<UINT> field, AccelerationStructure const& as) -> void;
 
-  WANDAPI
-  auto SetPipelineState(PipelineState const& pipeline_state) -> void;
+  [[nodiscard]] WANDAPI
+  auto ReferenceConstantBuffer(BufferView const& buf_view) -> UINT;
 
-  WANDAPI
-  auto SetRtState(RtStateObject const& rt_state) -> void;
+  [[nodiscard]] WANDAPI
+  auto ReferenceShaderResource(BufferView const& buf_view) -> UINT;
+
+  [[nodiscard]] WANDAPI
+  auto ReferenceShaderResource(Texture const& tex) -> UINT;
+
+  [[nodiscard]] WANDAPI
+  auto ReferenceUnorderedAccess(BufferView const& buf_view) -> UINT;
+
+  [[nodiscard]] WANDAPI
+  auto ReferenceUnorderedAccess(Texture const& tex) -> UINT;
+
+  [[nodiscard]] WANDAPI
+  auto ReferenceAccelerationStructure(AccelerationStructure const& as) -> UINT;
 
   WANDAPI
   auto UseBuffer(Buffer const& buf, D3D12_BARRIER_SYNC sync, D3D12_BARRIER_ACCESS access) -> void;
@@ -213,6 +228,12 @@ public:
   WANDAPI
   auto UseTexture(Texture const& tex, D3D12_BARRIER_SYNC sync, D3D12_BARRIER_ACCESS access,
                   D3D12_BARRIER_LAYOUT layout) -> void;
+
+  WANDAPI
+  auto SetPipelineState(PipelineState const& pipeline_state) -> void;
+
+  WANDAPI
+  auto SetRtState(RtStateObject const& rt_state) -> void;
 
 private:
   auto SetRootSignature(std::uint8_t num_params) const -> void;
@@ -250,3 +271,6 @@ private:
   friend GraphicsDevice;
 };
 }
+
+
+#include <wand/command_list.inl>

@@ -557,78 +557,110 @@ auto CommandList::SetViewports(std::span<D3D12_VIEWPORT const> const viewports) 
 }
 
 
-auto CommandList::SetPipelineParameter(UINT const index, UINT const value) const -> void {
+auto CommandList::SetPipelineParameters(UINT const index, UINT const count, void const* const params) const -> void {
   if (compute_pipeline_set_) {
-    cmd_list_->SetComputeRoot32BitConstant(d3d12::detail::kDrawParamsRootIdx, value, index);
+    cmd_list_->SetComputeRoot32BitConstants(d3d12::detail::kDrawParamsRootIdx, count, params, index);
   } else {
-    cmd_list_->SetGraphicsRoot32BitConstant(d3d12::detail::kDrawParamsRootIdx, value, index);
+    cmd_list_->SetGraphicsRoot32BitConstants(d3d12::detail::kDrawParamsRootIdx, count, params, index);
   }
 }
 
 
-auto CommandList::SetPipelineParameters(UINT const index, std::span<UINT const> const values) const -> void {
-  if (compute_pipeline_set_) {
-    cmd_list_->SetComputeRoot32BitConstants(d3d12::detail::kDrawParamsRootIdx, static_cast<UINT>(values.size()),
-      values.data(), index);
-  } else {
-    cmd_list_->SetGraphicsRoot32BitConstants(d3d12::detail::kDrawParamsRootIdx, static_cast<UINT>(values.size()),
-      values.data(), index);
-  }
+auto CommandList::SetConstantBuffer(ParamField<UINT> const field, BufferView const& buf_view) -> void {
+  SetPipelineParameter(field, ReferenceConstantBuffer(buf_view));
 }
 
 
-auto CommandList::SetConstantBuffer(UINT const param_idx, BufferView const& buf_view) -> void {
+auto CommandList::SetShaderResource(ParamField<UINT> const field, BufferView const& buf_view) -> void {
+  SetPipelineParameter(field, ReferenceShaderResource(buf_view));
+}
+
+
+auto CommandList::SetShaderResource(ParamField<UINT> const field, Texture const& tex) -> void {
+  SetPipelineParameter(field, ReferenceShaderResource(tex));
+}
+
+
+auto CommandList::SetUnorderedAccess(ParamField<UINT> const field, BufferView const& buf_view) -> void {
+  SetPipelineParameter(field, ReferenceUnorderedAccess(buf_view));
+}
+
+
+auto CommandList::SetUnorderedAccess(ParamField<UINT> const field, Texture const& tex) -> void {
+  SetPipelineParameter(field, ReferenceUnorderedAccess(tex));
+}
+
+
+auto CommandList::SetAccelerationStructure(ParamField<UINT> const field, AccelerationStructure const& as) -> void {
+  SetPipelineParameter(field, ReferenceAccelerationStructure(as));
+}
+
+
+auto CommandList::ReferenceConstantBuffer(BufferView const& buf_view) -> UINT {
   assert(HasAny(buf_view.GetDesc().usage, BufferViewUsage::kConstantBuffer));
   TrackAccess(*buf_view.GetBuffer(), {
     .sync = D3D12_BARRIER_SYNC_ALL_SHADING, .access = D3D12_BARRIER_ACCESS_CONSTANT_BUFFER
   });
-  SetPipelineParameter(param_idx, buf_view.GetConstantBuffer());
+  return buf_view.GetConstantBuffer();
 }
 
 
-auto CommandList::SetShaderResource(UINT const param_idx, BufferView const& buf_view) -> void {
+auto CommandList::ReferenceShaderResource(BufferView const& buf_view) -> UINT {
   assert(HasAny(buf_view.GetDesc().usage, BufferViewUsage::kShaderResource));
   TrackAccess(*buf_view.GetBuffer(), {
     .sync = D3D12_BARRIER_SYNC_ALL_SHADING, .access = D3D12_BARRIER_ACCESS_SHADER_RESOURCE
   });
-  SetPipelineParameter(param_idx, buf_view.GetShaderResource());
+  return buf_view.GetShaderResource();
 }
 
 
-auto CommandList::SetShaderResource(UINT const param_idx, Texture const& tex) -> void {
+auto CommandList::ReferenceShaderResource(Texture const& tex) -> UINT {
   TrackAccess(tex, {
     .scope = {.sync = D3D12_BARRIER_SYNC_ALL_SHADING, .access = D3D12_BARRIER_ACCESS_SHADER_RESOURCE},
     .layout = D3D12_BARRIER_LAYOUT_DIRECT_QUEUE_SHADER_RESOURCE
   });
-  SetPipelineParameter(param_idx, tex.GetShaderResource());
+  return tex.GetShaderResource();
 }
 
 
-auto CommandList::SetUnorderedAccess(UINT const param_idx, BufferView const& buf_view) -> void {
+auto CommandList::ReferenceUnorderedAccess(BufferView const& buf_view) -> UINT {
   assert(HasAny(buf_view.GetDesc().usage, BufferViewUsage::kUnorderedAccess));
   TrackAccess(*buf_view.GetBuffer(), {
     .sync = D3D12_BARRIER_SYNC_ALL_SHADING, .access = D3D12_BARRIER_ACCESS_UNORDERED_ACCESS
   });
-  SetPipelineParameter(param_idx, buf_view.GetUnorderedAccess());
+  return buf_view.GetUnorderedAccess();
 }
 
 
-auto CommandList::SetUnorderedAccess(UINT const param_idx, Texture const& tex) -> void {
+auto CommandList::ReferenceUnorderedAccess(Texture const& tex) -> UINT {
   TrackAccess(tex, {
     .scope = {.sync = D3D12_BARRIER_SYNC_ALL_SHADING, .access = D3D12_BARRIER_ACCESS_UNORDERED_ACCESS},
     .layout = D3D12_BARRIER_LAYOUT_DIRECT_QUEUE_UNORDERED_ACCESS
   });
-  SetPipelineParameter(param_idx, tex.GetUnorderedAccess());
+  return tex.GetUnorderedAccess();
 }
 
 
-auto CommandList::SetAccelerationStructure(UINT const param_idx, AccelerationStructure const& as) -> void {
-  assert(as.GetDesc().type == AccelerationStructureType::kTopLevel && "an AS set on the pipeline must be top-level.");
+auto CommandList::ReferenceAccelerationStructure(AccelerationStructure const& as) -> UINT {
+  assert(
+    as.GetDesc().type == AccelerationStructureType::kTopLevel && "an AS referenced on the pipeline must be top-level.");
   TrackAccess(*as.GetBuffer(), {
     .sync = D3D12_BARRIER_SYNC_ALL_SHADING,
     .access = D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_READ
   });
-  SetPipelineParameter(param_idx, as.GetShaderResource());
+  return as.GetShaderResource();
+}
+
+
+auto CommandList::UseBuffer(Buffer const& buf, D3D12_BARRIER_SYNC const sync,
+                            D3D12_BARRIER_ACCESS const access) -> void {
+  TrackAccess(buf, {.sync = sync, .access = access});
+}
+
+
+auto CommandList::UseTexture(Texture const& tex, D3D12_BARRIER_SYNC const sync, D3D12_BARRIER_ACCESS const access,
+                             D3D12_BARRIER_LAYOUT const layout) -> void {
+  TrackAccess(tex, {.scope = {.sync = sync, .access = access}, .layout = layout});
 }
 
 
@@ -645,18 +677,6 @@ auto CommandList::SetRtState(RtStateObject const& rt_state) -> void {
   compute_pipeline_set_ = true;
   pipeline_allows_ds_write_ = false;
   SetRootSignature(rt_state.num_params_);
-}
-
-
-auto CommandList::UseBuffer(Buffer const& buf, D3D12_BARRIER_SYNC const sync,
-                            D3D12_BARRIER_ACCESS const access) -> void {
-  TrackAccess(buf, {.sync = sync, .access = access});
-}
-
-
-auto CommandList::UseTexture(Texture const& tex, D3D12_BARRIER_SYNC const sync, D3D12_BARRIER_ACCESS const access,
-                             D3D12_BARRIER_LAYOUT const layout) -> void {
-  TrackAccess(tex, {.scope = {.sync = sync, .access = access}, .layout = layout});
 }
 
 
