@@ -40,7 +40,7 @@ struct AliasedTextureCreateInfo {
 
 
 namespace details {
-struct ExecuteBarrierCmdListRecord {
+struct LayoutCmdListRecord {
   SharedDeviceHandle<CommandList> cmd_list;
   UINT64 fence_completion_val;
 };
@@ -208,10 +208,13 @@ private:
   UINT present_flags_{0};
 
   SharedDeviceHandle<Fence> idle_fence_;
-  SharedDeviceHandle<Fence> inital_layout_fence_;
+  SharedDeviceHandle<Fence> layout_fence_;
 
   mutable std::mutex queue_submission_mutex_;
-  std::vector<details::ExecuteBarrierCmdListRecord> layout_cmd_lists_;
+  // Guarded by queue_submission_mutex_. Only used in ExecuteCommandLists.
+  std::vector<details::LayoutCmdListRecord> layout_cmd_lists_;
+  // Guarded by queue_submission_mutex_. Only used in ExecuteCommandLists.
+  std::vector<D3D12_TEXTURE_BARRIER> layout_barrier_storage_;
 
   CD3DX12FeatureSupport supported_features_;
 };

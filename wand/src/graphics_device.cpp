@@ -220,7 +220,7 @@ GraphicsDevice::GraphicsDevice(bool const enable_debug, bool const use_sw_render
   }
 
   idle_fence_ = CreateFence(0);
-  inital_layout_fence_ = CreateFence(0);
+  layout_fence_ = CreateFence(0);
 }
 
 
@@ -743,7 +743,7 @@ auto GraphicsDevice::ExecuteCommandLists(std::span<CommandList const> const cmd_
   // So we are submitting each command list in its own scope.
   // This is correct, just potentially slower.
   for (auto const& cmd_list : cmd_lists) {
-    std::vector<D3D12_TEXTURE_BARRIER> layout_barriers;
+    layout_barrier_storage_.clear();
 
     {
       std::scoped_lock const tracker_lck{state_tracker_mutex_};
@@ -756,7 +756,7 @@ auto GraphicsDevice::ExecuteCommandLists(std::span<CommandList const> const cmd_
         auto const global_state{global_resource_states_.Get(initial_layout.resource)};
         auto layout_before{global_state ? global_state->layout : D3D12_BARRIER_LAYOUT_UNDEFINED};
 
-        layout_barriers.emplace_back(D3D12_BARRIER_SYNC_NONE, D3D12_BARRIER_SYNC_NONE,
+        layout_barrier_storage_.emplace_back(D3D12_BARRIER_SYNC_NONE, D3D12_BARRIER_SYNC_NONE,
           D3D12_BARRIER_ACCESS_NO_ACCESS, D3D12_BARRIER_ACCESS_NO_ACCESS,
           layout_before, initial_layout.layout, initial_layout.resource,
           D3D12_BARRIER_SUBRESOURCE_RANGE{
@@ -776,10 +776,10 @@ auto GraphicsDevice::ExecuteCommandLists(std::span<CommandList const> const cmd_
       }
     }
 
-    if (!layout_barriers.empty()) {
+    if (!layout_barrier_storage_.empty()) {
       D3D12_BARRIER_GROUP const layout_barrier_group{
-        .Type = D3D12_BARRIER_TYPE_TEXTURE, .NumBarriers = ClampCast<UINT32>(layout_barriers.size()),
-        .pTextureBarriers = layout_barriers.data()
+        .Type = D3D12_BARRIER_TYPE_TEXTURE, .NumBarriers = ClampCast<UINT32>(layout_barrier_storage_.size()),
+        .pTextureBarriers = layout_barrier_storage_.data()
       };
 
       auto& layout_cmd{AcquireLayoutCmdList()};
@@ -789,7 +789,7 @@ auto GraphicsDevice::ExecuteCommandLists(std::span<CommandList const> const cmd_
       layout_cmd.End();
       queue_->ExecuteCommandLists(1,
         std::array{static_cast<ID3D12CommandList*>(layout_cmd.cmd_list_.Get())}.data());
-      SignalFenceUnlocked(*inital_layout_fence_);
+      SignalFenceUnlocked(*layout_fence_);
     }
 
     queue_->ExecuteCommandLists(1, CommandListCast(cmd_list.cmd_list_.GetAddressOf()));
@@ -858,7 +858,7 @@ auto GraphicsDevice::Present(SwapChain const& swap_chain) -> void {
     cmd_list.End();
 
     queue_->ExecuteCommandLists(1, std::array{static_cast<ID3D12CommandList*>(cmd_list.cmd_list_.Get())}.data());
-    SignalFenceUnlocked(*inital_layout_fence_);
+    SignalFenceUnlocked(*layout_fence_);
   }
 
   ThrowIfFailed(swap_chain.swap_chain_->Present(swap_chain.GetSyncInterval(), present_flags_),
@@ -1349,8 +1349,8 @@ auto GraphicsDevice::SignalFenceUnlocked(Fence& fence) const -> UINT64 {
 
 
 auto GraphicsDevice::AcquireLayoutCmdList() -> CommandList& {
-  auto const completed_fence_val{inital_layout_fence_->GetCompletedValue()};
-  auto const next_fence_val{inital_layout_fence_->GetNextValue()};
+  auto const completed_fence_val{layout_fence_->GetCompletedValue()};
+  auto const next_fence_val{layout_fence_->GetNextValue()};
 
   for (std::size_t i{0}; i < layout_cmd_lists_.size(); i++) {
     if (layout_cmd_lists_[i].fence_completion_val <= completed_fence_val) {
