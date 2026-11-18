@@ -743,22 +743,22 @@ auto GraphicsDevice::ExecuteCommandLists(std::span<CommandList const> const cmd_
   // So we are submitting each command list in its own scope.
   // This is correct, just potentially slower.
   for (auto const& cmd_list : cmd_lists) {
-    std::vector<D3D12_TEXTURE_BARRIER> pending_tex_barriers;
+    std::vector<D3D12_TEXTURE_BARRIER> layout_barriers;
 
     {
       std::scoped_lock const tracker_lck{state_tracker_mutex_};
 
-      // We satisfy the pending barrier requests of the command list.
-      // A pending barrier is a barrier that transitions the resource from its
+      // We satisfy the required initial layouts of the command list.
+      // A layout barrier is a barrier that transitions the resource from its
       // last known state - tracked globally - to the first state used in the command list.
       // It is a bridge between command lists and execution scopes.
-      for (auto const& pending_barrier : cmd_list.pending_barriers_) {
-        auto const global_state{global_resource_states_.Get(pending_barrier.resource)};
+      for (auto const& initial_layout : cmd_list.required_initial_layouts_) {
+        auto const global_state{global_resource_states_.Get(initial_layout.resource)};
         auto layout_before{global_state ? global_state->layout : D3D12_BARRIER_LAYOUT_UNDEFINED};
 
-        pending_tex_barriers.emplace_back(D3D12_BARRIER_SYNC_NONE, D3D12_BARRIER_SYNC_NONE,
+        layout_barriers.emplace_back(D3D12_BARRIER_SYNC_NONE, D3D12_BARRIER_SYNC_NONE,
           D3D12_BARRIER_ACCESS_NO_ACCESS, D3D12_BARRIER_ACCESS_NO_ACCESS,
-          layout_before, pending_barrier.layout, pending_barrier.resource,
+          layout_before, initial_layout.layout, initial_layout.resource,
           D3D12_BARRIER_SUBRESOURCE_RANGE{
             .IndexOrFirstMipLevel = 0xffffffff, .NumMipLevels = 0, .FirstArraySlice = 0,
             .NumArraySlices = 0,
@@ -776,19 +776,19 @@ auto GraphicsDevice::ExecuteCommandLists(std::span<CommandList const> const cmd_
       }
     }
 
-    if (!pending_tex_barriers.empty()) {
-      D3D12_BARRIER_GROUP const pending_barrier_group{
-        .Type = D3D12_BARRIER_TYPE_TEXTURE, .NumBarriers = ClampCast<UINT32>(pending_tex_barriers.size()),
-        .pTextureBarriers = pending_tex_barriers.data()
+    if (!layout_barriers.empty()) {
+      D3D12_BARRIER_GROUP const layout_barrier_group{
+        .Type = D3D12_BARRIER_TYPE_TEXTURE, .NumBarriers = ClampCast<UINT32>(layout_barriers.size()),
+        .pTextureBarriers = layout_barriers.data()
       };
 
-      auto& pending_barrier_cmd{AcquirePendingBarrierCmdList()};
+      auto& layout_cmd{AcquireLayoutCmdList()};
 
-      pending_barrier_cmd.Begin(nullptr);
-      pending_barrier_cmd.cmd_list_->Barrier(1, &pending_barrier_group);
-      pending_barrier_cmd.End();
+      layout_cmd.Begin(nullptr);
+      layout_cmd.cmd_list_->Barrier(1, &layout_barrier_group);
+      layout_cmd.End();
       queue_->ExecuteCommandLists(1,
-        std::array{static_cast<ID3D12CommandList*>(pending_barrier_cmd.cmd_list_.Get())}.data());
+        std::array{static_cast<ID3D12CommandList*>(layout_cmd.cmd_list_.Get())}.data());
       SignalFenceUnlocked(*execute_barrier_fence_);
     }
 
@@ -852,7 +852,7 @@ auto GraphicsDevice::Present(SwapChain const& swap_chain) -> void {
       .Type = D3D12_BARRIER_TYPE_TEXTURE, .NumBarriers = 1, .pTextureBarriers = &barrier
     };
 
-    auto& cmd_list{AcquirePendingBarrierCmdList()};
+    auto& cmd_list{AcquireLayoutCmdList()};
     cmd_list.Begin(nullptr);
     cmd_list.cmd_list_->Barrier(1, &barrier_group);
     cmd_list.End();
@@ -1348,7 +1348,7 @@ auto GraphicsDevice::SignalFenceUnlocked(Fence& fence) const -> UINT64 {
 }
 
 
-auto GraphicsDevice::AcquirePendingBarrierCmdList() -> CommandList& {
+auto GraphicsDevice::AcquireLayoutCmdList() -> CommandList& {
   auto const completed_fence_val{execute_barrier_fence_->GetCompletedValue()};
   auto const next_fence_val{execute_barrier_fence_->GetNextValue()};
 

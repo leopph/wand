@@ -22,7 +22,7 @@
 
 namespace wand {
 namespace details {
-struct PendingBarrier {
+struct InitialLayout {
   D3D12_BARRIER_LAYOUT layout;
   ID3D12Resource* resource;
 };
@@ -230,7 +230,7 @@ private:
   Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList7> cmd_list_;
   detail::ResourceStateTracker<detail::PipelineBufferState> local_buffer_states_;
   detail::ResourceStateTracker<detail::PipelineTextureState> local_texture_states_;
-  std::vector<details::PendingBarrier> pending_barriers_;
+  std::vector<details::InitialLayout> required_initial_layouts_;
   std::vector<Resource const*> sealed_in_list_;
   std::vector<Texture const*> textures_to_seal_;
   std::vector<D3D12_BUFFER_BARRIER> buffer_barriers_;

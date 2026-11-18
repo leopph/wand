@@ -175,7 +175,7 @@ private:
   auto SignalFenceUnlocked(Fence& fence) const -> UINT64;
 
   [[nodiscard]]
-  auto AcquirePendingBarrierCmdList() -> CommandList&;
+  auto AcquireLayoutCmdList() -> CommandList&;
 
   [[nodiscard]]
   auto MakeHeapType(CpuAccess cpu_access) const -> D3D12_HEAP_TYPE;

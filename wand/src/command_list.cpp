@@ -34,7 +34,7 @@ auto CommandList::Begin(PipelineState const* pipeline_state) -> void {
   SetRootSignature(pipeline_state ? pipeline_state->num_params_ : 0);
   local_buffer_states_.Clear();
   local_texture_states_.Clear();
-  pending_barriers_.clear();
+  required_initial_layouts_.clear();
   sealed_in_list_.clear();
   textures_to_seal_.clear();
   buffer_barriers_.clear();
@@ -803,7 +803,8 @@ auto CommandList::TrackAccess(Texture const& tex, detail::TextureAccess const re
   // thus the first use of a texture on a command list is also its first use in the ECL scope.
   // Incompatible layouts: barrier with before = current and after = requested, track requested
   // Compatible layouts and initialized compression metadata (if any):
-  // - First use: no barrier, track requested, layout compatibility guaranteed at submit time using pending barriers.
+  // - First use: no barrier, track requested, layout compatibility guaranteed at submit time using layout transition
+  //   barriers created from the required initial layouts.
   // - Read->read: no barrier, track current | requested
   // - Write->read->read: 
   //   -- if current covers requested: no barrier, no track
@@ -816,7 +817,7 @@ auto CommandList::TrackAccess(Texture const& tex, detail::TextureAccess const re
   // Written = written || requested_is_write
 
   if (!local_state) {
-    pending_barriers_.emplace_back(requested.layout, tex.GetInternalResource());
+    required_initial_layouts_.emplace_back(requested.layout, tex.GetInternalResource());
     local_texture_states_.Record(tex.GetInternalResource(), {
       .current = requested,
       .written = requested_is_write
