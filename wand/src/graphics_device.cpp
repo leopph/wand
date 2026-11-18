@@ -775,8 +775,8 @@ auto GraphicsDevice::ExecuteCommandLists(std::span<CommandList const> const cmd_
       }
 
       // We record the final states of each resource used in the command list to the global state tracker
-      for (auto const& [res, state] : cmd_list.local_resource_states_) {
-        global_resource_states_.Record(res, {.layout = state.layout});
+      for (auto const& [res, state] : cmd_list.local_texture_states_) {
+        global_resource_states_.Record(res, {.layout = state.current.layout});
       }
 
       for (auto const* const res : cmd_list.sealed_in_list_) {

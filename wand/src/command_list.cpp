@@ -32,7 +32,8 @@ auto CommandList::Begin(PipelineState const* pipeline_state) -> void {
     std::array{res_desc_heap_->GetInternalPtr(), sampler_heap_->GetInternalPtr()}.data());
   compute_pipeline_set_ = pipeline_state && pipeline_state->is_compute_;
   SetRootSignature(pipeline_state ? pipeline_state->num_params_ : 0);
-  local_resource_states_.Clear();
+  local_buffer_states_.Clear();
+  local_texture_states_.Clear();
   pending_barriers_.clear();
   sealed_in_list_.clear();
   textures_to_seal_.clear();
@@ -47,7 +48,9 @@ auto CommandList::Begin(PipelineState const* pipeline_state) -> void {
 
 auto CommandList::End() -> void {
   for (auto const* const tex : textures_to_seal_) {
-    GenerateBarrier(*tex, D3D12_BARRIER_SYNC_NONE, D3D12_BARRIER_ACCESS_NO_ACCESS, kSealedLayout);
+    TrackAccess(*tex, {
+      .scope = {.sync = D3D12_BARRIER_SYNC_NONE, .access = D3D12_BARRIER_ACCESS_NO_ACCESS}, .layout = kSealedLayout
+    });
   }
 
   RecordBarriers();
@@ -115,42 +118,56 @@ auto CommandList::BuildAccelerationStructure(BuildAccelerationStructureDesc cons
   if (desc.src_as) {
     assert(desc.src_as->GetDesc().type == desc.dst_as.get().GetDesc().type &&
       "AS build source and destination types must match.");
-    GenerateBarrier(*desc.src_as->GetBuffer(), D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
-      D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_READ);
+    TrackAccess(*desc.src_as->GetBuffer(), {
+      .sync = D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
+      .access = D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_READ
+    });
   }
 
   std::visit(Overloaded{
     [this](BuildBottomLevelAsInputs const& in) {
       for (auto const& geom : in.geometries) {
-        GenerateBarrier(geom.vertices.GetBuffer(), D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
-          D3D12_BARRIER_ACCESS_SHADER_RESOURCE);
+        TrackAccess(geom.vertices.GetBuffer(), {
+          .sync = D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
+          .access = D3D12_BARRIER_ACCESS_SHADER_RESOURCE
+        });
 
         if (geom.indices) {
-          GenerateBarrier(geom.indices->GetBuffer(), D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
-            D3D12_BARRIER_ACCESS_SHADER_RESOURCE);
+          TrackAccess(geom.indices->GetBuffer(), {
+            .sync = D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
+            .access = D3D12_BARRIER_ACCESS_SHADER_RESOURCE
+          });
         }
 
         if (geom.transform) {
-          GenerateBarrier(geom.transform->GetBuffer(), D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
-            D3D12_BARRIER_ACCESS_SHADER_RESOURCE);
+          TrackAccess(geom.transform->GetBuffer(), {
+            .sync = D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
+            .access = D3D12_BARRIER_ACCESS_SHADER_RESOURCE
+          });
         }
       }
     },
     [this](BuildTopLevelAsInputs const& in) {
-      GenerateBarrier(in.instances.GetBuffer(), D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
-        D3D12_BARRIER_ACCESS_SHADER_RESOURCE);
+      TrackAccess(in.instances.GetBuffer(), {
+        .sync = D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
+        .access = D3D12_BARRIER_ACCESS_SHADER_RESOURCE
+      });
     }
   }, desc.inputs);
 
-  GenerateBarrier(*desc.dst_as.get().GetBuffer(), D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
-    D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_WRITE);
+  TrackAccess(*desc.dst_as.get().GetBuffer(), {
+    .sync = D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
+    .access = D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_WRITE
+  });
 
   if (desc.scratch_buffer) {
     assert(HasAny(desc.scratch_buffer->GetBuffer().GetDesc().usage, BufferUsage::kAccelerationScratch));
     assert(desc.scratch_buffer->GetRegion().offset % D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT == 0
       && "AS build scratch buffer must be properly aligned.");
-    GenerateBarrier(desc.scratch_buffer->GetBuffer(), D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
-      D3D12_BARRIER_ACCESS_UNORDERED_ACCESS);
+    TrackAccess(desc.scratch_buffer->GetBuffer(), {
+      .sync = D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
+      .access = D3D12_BARRIER_ACCESS_UNORDERED_ACCESS
+    });
   }
 
   RecordBarriers();
@@ -173,8 +190,10 @@ auto CommandList::BuildAccelerationStructure(BuildAccelerationStructureDesc cons
 auto CommandList::ClearDepthStencil(Texture const& tex, D3D12_CLEAR_FLAGS const clear_flags, FLOAT const depth,
                                     UINT8 const stencil, std::span<D3D12_RECT const> const rects,
                                     UINT16 const mip_level) -> void {
-  GenerateBarrier(tex, D3D12_BARRIER_SYNC_DEPTH_STENCIL, D3D12_BARRIER_ACCESS_DEPTH_STENCIL_WRITE,
-    D3D12_BARRIER_LAYOUT_DEPTH_STENCIL_WRITE);
+  TrackAccess(tex, {
+    .scope = {.sync = D3D12_BARRIER_SYNC_DEPTH_STENCIL, .access = D3D12_BARRIER_ACCESS_DEPTH_STENCIL_WRITE},
+    .layout = D3D12_BARRIER_LAYOUT_DEPTH_STENCIL_WRITE
+  });
   RecordBarriers();
 
   cmd_list_->ClearDepthStencilView(dsv_heap_->GetDescriptorCpuHandle(tex.GetDepthStencilView(mip_level)), clear_flags,
@@ -185,8 +204,10 @@ auto CommandList::ClearDepthStencil(Texture const& tex, D3D12_CLEAR_FLAGS const 
 
 auto CommandList::ClearRenderTarget(Texture const& tex, std::span<FLOAT const, 4> const color_rgba,
                                     std::span<D3D12_RECT const> const rects, UINT16 const mip_level) -> void {
-  GenerateBarrier(tex, D3D12_BARRIER_SYNC_RENDER_TARGET, D3D12_BARRIER_ACCESS_RENDER_TARGET,
-    D3D12_BARRIER_LAYOUT_RENDER_TARGET);
+  TrackAccess(tex, {
+    .scope = {.sync = D3D12_BARRIER_SYNC_RENDER_TARGET, .access = D3D12_BARRIER_ACCESS_RENDER_TARGET},
+    .layout = D3D12_BARRIER_LAYOUT_RENDER_TARGET
+  });
   RecordBarriers();
 
   cmd_list_->ClearRenderTargetView(rtv_heap_->GetDescriptorCpuHandle(tex.GetRenderTargetView(mip_level)),
@@ -199,8 +220,8 @@ auto CommandList::CopyBuffer(Buffer const& dst, Buffer const& src) -> void {
   assert(HasAny(src.GetDesc().usage, BufferUsage::kCopySource));
   assert(HasAny(dst.GetDesc().usage, BufferUsage::kCopyDestination));
 
-  GenerateBarrier(src, D3D12_BARRIER_SYNC_COPY, D3D12_BARRIER_ACCESS_COPY_SOURCE);
-  GenerateBarrier(dst, D3D12_BARRIER_SYNC_COPY, D3D12_BARRIER_ACCESS_COPY_DEST);
+  TrackAccess(src, {.sync = D3D12_BARRIER_SYNC_COPY, .access = D3D12_BARRIER_ACCESS_COPY_SOURCE});
+  TrackAccess(dst, {.sync = D3D12_BARRIER_SYNC_COPY, .access = D3D12_BARRIER_ACCESS_COPY_DEST});
   RecordBarriers();
 
   cmd_list_->CopyResource(dst.GetInternalResource(), src.GetInternalResource());
@@ -212,8 +233,8 @@ auto CommandList::CopyBufferRegion(Buffer const& dst, UINT64 const dst_offset, B
   assert(HasAny(src.GetDesc().usage, BufferUsage::kCopySource));
   assert(HasAny(dst.GetDesc().usage, BufferUsage::kCopyDestination));
 
-  GenerateBarrier(src, D3D12_BARRIER_SYNC_COPY, D3D12_BARRIER_ACCESS_COPY_SOURCE);
-  GenerateBarrier(dst, D3D12_BARRIER_SYNC_COPY, D3D12_BARRIER_ACCESS_COPY_DEST);
+  TrackAccess(src, {.sync = D3D12_BARRIER_SYNC_COPY, .access = D3D12_BARRIER_ACCESS_COPY_SOURCE});
+  TrackAccess(dst, {.sync = D3D12_BARRIER_SYNC_COPY, .access = D3D12_BARRIER_ACCESS_COPY_DEST});
   RecordBarriers();
 
   cmd_list_->CopyBufferRegion(dst.GetInternalResource(), dst_offset, src.GetInternalResource(), src_offset, num_bytes);
@@ -221,10 +242,14 @@ auto CommandList::CopyBufferRegion(Buffer const& dst, UINT64 const dst_offset, B
 
 
 auto CommandList::CopyTexture(Texture const& dst, Texture const& src) -> void {
-  GenerateBarrier(src, D3D12_BARRIER_SYNC_COPY, D3D12_BARRIER_ACCESS_COPY_SOURCE,
-    D3D12_BARRIER_LAYOUT_DIRECT_QUEUE_COPY_SOURCE);
-  GenerateBarrier(dst, D3D12_BARRIER_SYNC_COPY, D3D12_BARRIER_ACCESS_COPY_DEST,
-    D3D12_BARRIER_LAYOUT_DIRECT_QUEUE_COPY_DEST);
+  TrackAccess(src, {
+    .scope = {.sync = D3D12_BARRIER_SYNC_COPY, .access = D3D12_BARRIER_ACCESS_COPY_SOURCE},
+    .layout = D3D12_BARRIER_LAYOUT_DIRECT_QUEUE_COPY_SOURCE
+  });
+  TrackAccess(dst, {
+    .scope = {.sync = D3D12_BARRIER_SYNC_COPY, .access = D3D12_BARRIER_ACCESS_COPY_DEST},
+    .layout = D3D12_BARRIER_LAYOUT_DIRECT_QUEUE_COPY_DEST
+  });
   RecordBarriers();
 
   cmd_list_->CopyResource(dst.GetInternalResource(), src.GetInternalResource());
@@ -234,10 +259,14 @@ auto CommandList::CopyTexture(Texture const& dst, Texture const& src) -> void {
 auto CommandList::CopyTextureRegion(Texture const& dst, UINT const dst_subresource_index, UINT const dst_x,
                                     UINT const dst_y, UINT const dst_z, Texture const& src,
                                     UINT const src_subresource_index, D3D12_BOX const* src_box) -> void {
-  GenerateBarrier(src, D3D12_BARRIER_SYNC_COPY, D3D12_BARRIER_ACCESS_COPY_SOURCE,
-    D3D12_BARRIER_LAYOUT_DIRECT_QUEUE_COPY_SOURCE);
-  GenerateBarrier(dst, D3D12_BARRIER_SYNC_COPY, D3D12_BARRIER_ACCESS_COPY_DEST,
-    D3D12_BARRIER_LAYOUT_DIRECT_QUEUE_COPY_DEST);
+  TrackAccess(src, {
+    .scope = {.sync = D3D12_BARRIER_SYNC_COPY, .access = D3D12_BARRIER_ACCESS_COPY_SOURCE},
+    .layout = D3D12_BARRIER_LAYOUT_DIRECT_QUEUE_COPY_SOURCE
+  });
+  TrackAccess(dst, {
+    .scope = {.sync = D3D12_BARRIER_SYNC_COPY, .access = D3D12_BARRIER_ACCESS_COPY_DEST},
+    .layout = D3D12_BARRIER_LAYOUT_DIRECT_QUEUE_COPY_DEST
+  });
   RecordBarriers();
 
   D3D12_TEXTURE_COPY_LOCATION const dst_loc{
@@ -257,9 +286,11 @@ auto CommandList::CopyTextureRegion(Texture const& dst, UINT const dst_subresour
                                     D3D12_PLACED_SUBRESOURCE_FOOTPRINT const& src_footprint) -> void {
   assert(HasAny(src.GetDesc().usage, BufferUsage::kCopySource));
 
-  GenerateBarrier(src, D3D12_BARRIER_SYNC_COPY, D3D12_BARRIER_ACCESS_COPY_SOURCE);
-  GenerateBarrier(dst, D3D12_BARRIER_SYNC_COPY, D3D12_BARRIER_ACCESS_COPY_DEST,
-    D3D12_BARRIER_LAYOUT_DIRECT_QUEUE_COPY_DEST);
+  TrackAccess(src, {.sync = D3D12_BARRIER_SYNC_COPY, .access = D3D12_BARRIER_ACCESS_COPY_SOURCE});
+  TrackAccess(dst, {
+    .scope = {.sync = D3D12_BARRIER_SYNC_COPY, .access = D3D12_BARRIER_ACCESS_COPY_DEST},
+    .layout = D3D12_BARRIER_LAYOUT_DIRECT_QUEUE_COPY_DEST
+  });
   RecordBarriers();
 
   D3D12_TEXTURE_COPY_LOCATION const dst_loc{
@@ -275,16 +306,20 @@ auto CommandList::CopyTextureRegion(Texture const& dst, UINT const dst_subresour
 
 
 auto CommandList::DiscardRenderTarget(Texture const& tex, std::optional<D3D12_DISCARD_REGION> const& region) -> void {
-  GenerateBarrier(tex, D3D12_BARRIER_SYNC_RENDER_TARGET, D3D12_BARRIER_ACCESS_RENDER_TARGET,
-    D3D12_BARRIER_LAYOUT_RENDER_TARGET);
+  TrackAccess(tex, {
+    .scope = {.sync = D3D12_BARRIER_SYNC_RENDER_TARGET, .access = D3D12_BARRIER_ACCESS_RENDER_TARGET},
+    .layout = D3D12_BARRIER_LAYOUT_RENDER_TARGET
+  });
   RecordBarriers();
   cmd_list_->DiscardResource(tex.GetInternalResource(), region ? &*region : nullptr);
 }
 
 
 auto CommandList::DiscardDepthStencil(Texture const& tex, std::optional<D3D12_DISCARD_REGION> const& region) -> void {
-  GenerateBarrier(tex, D3D12_BARRIER_SYNC_DEPTH_STENCIL, D3D12_BARRIER_ACCESS_DEPTH_STENCIL_WRITE,
-    D3D12_BARRIER_LAYOUT_DEPTH_STENCIL_WRITE);
+  TrackAccess(tex, {
+    .scope = {.sync = D3D12_BARRIER_SYNC_DEPTH_STENCIL, .access = D3D12_BARRIER_ACCESS_DEPTH_STENCIL_WRITE},
+    .layout = D3D12_BARRIER_LAYOUT_DEPTH_STENCIL_WRITE
+  });
   RecordBarriers();
   cmd_list_->DiscardResource(tex.GetInternalResource(), region ? &*region : nullptr);
 }
@@ -334,22 +369,30 @@ auto CommandList::DispatchRays(DispatchRaysDesc const& desc) -> void {
     assert(is_table_stride_valid(desc.callable_shader_table->GetRegion()));
   }
 
-  GenerateBarrier(desc.ray_generation_shader_record.GetBuffer(), D3D12_BARRIER_SYNC_RAYTRACING,
-    D3D12_BARRIER_ACCESS_SHADER_RESOURCE);
+  TrackAccess(desc.ray_generation_shader_record.GetBuffer(), {
+    .sync = D3D12_BARRIER_SYNC_RAYTRACING,
+    .access = D3D12_BARRIER_ACCESS_SHADER_RESOURCE
+  });
 
   if (desc.miss_shader_table) {
-    GenerateBarrier(desc.miss_shader_table->GetBuffer(), D3D12_BARRIER_SYNC_RAYTRACING,
-      D3D12_BARRIER_ACCESS_SHADER_RESOURCE);
+    TrackAccess(desc.miss_shader_table->GetBuffer(), {
+      .sync = D3D12_BARRIER_SYNC_RAYTRACING,
+      .access = D3D12_BARRIER_ACCESS_SHADER_RESOURCE
+    });
   }
 
   if (desc.hit_group_table) {
-    GenerateBarrier(desc.hit_group_table->GetBuffer(), D3D12_BARRIER_SYNC_RAYTRACING,
-      D3D12_BARRIER_ACCESS_SHADER_RESOURCE);
+    TrackAccess(desc.hit_group_table->GetBuffer(), {
+      .sync = D3D12_BARRIER_SYNC_RAYTRACING,
+      .access = D3D12_BARRIER_ACCESS_SHADER_RESOURCE
+    });
   }
 
   if (desc.callable_shader_table) {
-    GenerateBarrier(desc.callable_shader_table->GetBuffer(), D3D12_BARRIER_SYNC_RAYTRACING,
-      D3D12_BARRIER_ACCESS_SHADER_RESOURCE);
+    TrackAccess(desc.callable_shader_table->GetBuffer(), {
+      .sync = D3D12_BARRIER_SYNC_RAYTRACING,
+      .access = D3D12_BARRIER_ACCESS_SHADER_RESOURCE
+    });
   }
 
   RecordBarriers();
@@ -406,10 +449,14 @@ auto CommandList::DrawInstanced(UINT const vertex_count_per_instance, UINT const
 
 
 auto CommandList::Resolve(Texture const& dst, Texture const& src, DXGI_FORMAT const format) -> void {
-  GenerateBarrier(src, D3D12_BARRIER_SYNC_RESOLVE, D3D12_BARRIER_ACCESS_RESOLVE_SOURCE,
-    D3D12_BARRIER_LAYOUT_RESOLVE_SOURCE);
-  GenerateBarrier(dst, D3D12_BARRIER_SYNC_RESOLVE, D3D12_BARRIER_ACCESS_RESOLVE_DEST,
-    D3D12_BARRIER_LAYOUT_RESOLVE_DEST);
+  TrackAccess(src, {
+    .scope = {.sync = D3D12_BARRIER_SYNC_RESOLVE, .access = D3D12_BARRIER_ACCESS_RESOLVE_SOURCE},
+    .layout = D3D12_BARRIER_LAYOUT_RESOLVE_SOURCE
+  });
+  TrackAccess(dst, {
+    .scope = {.sync = D3D12_BARRIER_SYNC_RESOLVE, .access = D3D12_BARRIER_ACCESS_RESOLVE_DEST},
+    .layout = D3D12_BARRIER_LAYOUT_RESOLVE_DEST
+  });
   RecordBarriers();
   cmd_list_->ResolveSubresource(dst.GetInternalResource(), 0, src.GetInternalResource(), 0, format);
 }
@@ -433,11 +480,12 @@ auto CommandList::SetBlendFactor(std::span<FLOAT const, 4> const blend_factor) c
 
 auto CommandList::SetIndexBuffer(Buffer const& buf, DXGI_FORMAT const index_format) -> void {
   assert(HasAny(buf.GetDesc().usage, BufferUsage::kIndexBuffer));
-  GenerateBarrier(buf, D3D12_BARRIER_SYNC_INDEX_INPUT, D3D12_BARRIER_ACCESS_INDEX_BUFFER);
+  TrackAccess(buf, {.sync = D3D12_BARRIER_SYNC_INDEX_INPUT, .access = D3D12_BARRIER_ACCESS_INDEX_BUFFER});
 
   D3D12_INDEX_BUFFER_VIEW const ibv{
-    buf.GetInternalResource()->GetGPUVirtualAddress(), static_cast<UINT>(buf.GetInternalResource()->GetDesc1().Width),
-    index_format
+    .BufferLocation = buf.GetInternalResource()->GetGPUVirtualAddress(),
+    .SizeInBytes = static_cast<UINT>(buf.GetInternalResource()->GetDesc1().Width),
+    .Format = index_format
   };
   cmd_list_->IASetIndexBuffer(&ibv);
 }
@@ -452,19 +500,29 @@ auto CommandList::SetRenderTargets(std::span<Texture const* const> const render_
                                    Texture const* const depth_stencil, UINT16 const mip_level) -> void {
   std::ranges::for_each(render_targets, [this](Texture const* const tex) {
     if (tex) {
-      GenerateBarrier(*tex, D3D12_BARRIER_SYNC_RENDER_TARGET, D3D12_BARRIER_ACCESS_RENDER_TARGET,
-        D3D12_BARRIER_LAYOUT_RENDER_TARGET);
+      TrackAccess(*tex, {
+        .scope = {.sync = D3D12_BARRIER_SYNC_RENDER_TARGET, .access = D3D12_BARRIER_ACCESS_RENDER_TARGET},
+        .layout = D3D12_BARRIER_LAYOUT_RENDER_TARGET
+      });
     }
   });
 
   if (depth_stencil) {
-    GenerateBarrier(*depth_stencil, D3D12_BARRIER_SYNC_DEPTH_STENCIL,
-      pipeline_allows_ds_write_
-        ? D3D12_BARRIER_ACCESS_DEPTH_STENCIL_WRITE
-        : D3D12_BARRIER_ACCESS_DEPTH_STENCIL_READ,
-      pipeline_allows_ds_write_
-        ? D3D12_BARRIER_LAYOUT_DEPTH_STENCIL_WRITE
-        : D3D12_BARRIER_LAYOUT_DEPTH_STENCIL_READ);
+    TrackAccess(*depth_stencil, pipeline_allows_ds_write_
+                                  ? detail::TextureAccess{
+                                    .scope = {
+                                      .sync = D3D12_BARRIER_SYNC_DEPTH_STENCIL,
+                                      .access = D3D12_BARRIER_ACCESS_DEPTH_STENCIL_WRITE
+                                    },
+                                    .layout = D3D12_BARRIER_LAYOUT_DEPTH_STENCIL_WRITE
+                                  }
+                                  : detail::TextureAccess{
+                                    .scope = {
+                                      .sync = D3D12_BARRIER_SYNC_DEPTH_STENCIL,
+                                      .access = D3D12_BARRIER_ACCESS_DEPTH_STENCIL_READ
+                                    },
+                                    .layout = D3D12_BARRIER_LAYOUT_DEPTH_STENCIL_READ
+                                  });
   }
 
   std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> rt_handles;
@@ -521,43 +579,55 @@ auto CommandList::SetPipelineParameters(UINT const index, std::span<UINT const> 
 
 auto CommandList::SetConstantBuffer(UINT const param_idx, BufferView const& buf_view) -> void {
   assert(HasAny(buf_view.GetDesc().usage, BufferViewUsage::kConstantBuffer));
-  GenerateBarrier(*buf_view.GetBuffer(), D3D12_BARRIER_SYNC_ALL_SHADING, D3D12_BARRIER_ACCESS_CONSTANT_BUFFER);
+  TrackAccess(*buf_view.GetBuffer(), {
+    .sync = D3D12_BARRIER_SYNC_ALL_SHADING, .access = D3D12_BARRIER_ACCESS_CONSTANT_BUFFER
+  });
   SetPipelineParameter(param_idx, buf_view.GetConstantBuffer());
 }
 
 
 auto CommandList::SetShaderResource(UINT const param_idx, BufferView const& buf_view) -> void {
   assert(HasAny(buf_view.GetDesc().usage, BufferViewUsage::kShaderResource));
-  GenerateBarrier(*buf_view.GetBuffer(), D3D12_BARRIER_SYNC_ALL_SHADING, D3D12_BARRIER_ACCESS_SHADER_RESOURCE);
+  TrackAccess(*buf_view.GetBuffer(), {
+    .sync = D3D12_BARRIER_SYNC_ALL_SHADING, .access = D3D12_BARRIER_ACCESS_SHADER_RESOURCE
+  });
   SetPipelineParameter(param_idx, buf_view.GetShaderResource());
 }
 
 
 auto CommandList::SetShaderResource(UINT const param_idx, Texture const& tex) -> void {
-  GenerateBarrier(tex, D3D12_BARRIER_SYNC_ALL_SHADING, D3D12_BARRIER_ACCESS_SHADER_RESOURCE,
-    D3D12_BARRIER_LAYOUT_DIRECT_QUEUE_SHADER_RESOURCE);
+  TrackAccess(tex, {
+    .scope = {.sync = D3D12_BARRIER_SYNC_ALL_SHADING, .access = D3D12_BARRIER_ACCESS_SHADER_RESOURCE},
+    .layout = D3D12_BARRIER_LAYOUT_DIRECT_QUEUE_SHADER_RESOURCE
+  });
   SetPipelineParameter(param_idx, tex.GetShaderResource());
 }
 
 
 auto CommandList::SetUnorderedAccess(UINT const param_idx, BufferView const& buf_view) -> void {
   assert(HasAny(buf_view.GetDesc().usage, BufferViewUsage::kUnorderedAccess));
-  GenerateBarrier(*buf_view.GetBuffer(), D3D12_BARRIER_SYNC_ALL_SHADING, D3D12_BARRIER_ACCESS_UNORDERED_ACCESS);
+  TrackAccess(*buf_view.GetBuffer(), {
+    .sync = D3D12_BARRIER_SYNC_ALL_SHADING, .access = D3D12_BARRIER_ACCESS_UNORDERED_ACCESS
+  });
   SetPipelineParameter(param_idx, buf_view.GetUnorderedAccess());
 }
 
 
 auto CommandList::SetUnorderedAccess(UINT const param_idx, Texture const& tex) -> void {
-  GenerateBarrier(tex, D3D12_BARRIER_SYNC_ALL_SHADING, D3D12_BARRIER_ACCESS_UNORDERED_ACCESS,
-    D3D12_BARRIER_LAYOUT_DIRECT_QUEUE_UNORDERED_ACCESS);
+  TrackAccess(tex, {
+    .scope = {.sync = D3D12_BARRIER_SYNC_ALL_SHADING, .access = D3D12_BARRIER_ACCESS_UNORDERED_ACCESS},
+    .layout = D3D12_BARRIER_LAYOUT_DIRECT_QUEUE_UNORDERED_ACCESS
+  });
   SetPipelineParameter(param_idx, tex.GetUnorderedAccess());
 }
 
 
 auto CommandList::SetAccelerationStructure(UINT const param_idx, AccelerationStructure const& as) -> void {
   assert(as.GetDesc().type == AccelerationStructureType::kTopLevel && "an AS set on the pipeline must be top-level.");
-  GenerateBarrier(*as.GetBuffer(), D3D12_BARRIER_SYNC_ALL_SHADING,
-    D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_READ);
+  TrackAccess(*as.GetBuffer(), {
+    .sync = D3D12_BARRIER_SYNC_ALL_SHADING,
+    .access = D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_READ
+  });
   SetPipelineParameter(param_idx, as.GetShaderResource());
 }
 
@@ -580,13 +650,13 @@ auto CommandList::SetRtState(RtStateObject const& rt_state) -> void {
 
 auto CommandList::UseBuffer(Buffer const& buf, D3D12_BARRIER_SYNC const sync,
                             D3D12_BARRIER_ACCESS const access) -> void {
-  GenerateBarrier(buf, sync, access);
+  TrackAccess(buf, {.sync = sync, .access = access});
 }
 
 
 auto CommandList::UseTexture(Texture const& tex, D3D12_BARRIER_SYNC const sync, D3D12_BARRIER_ACCESS const access,
                              D3D12_BARRIER_LAYOUT const layout) -> void {
-  GenerateBarrier(tex, sync, access, layout);
+  TrackAccess(tex, {.scope = {.sync = sync, .access = access}, .layout = layout});
 }
 
 
@@ -612,10 +682,9 @@ CommandList::CommandList(ComPtr<ID3D12CommandAllocator> allocator, ComPtr<ID3D12
   root_signatures_{root_signatures} {}
 
 
-auto CommandList::GenerateBarrier(Buffer const& buf, D3D12_BARRIER_SYNC const sync,
-                                  D3D12_BARRIER_ACCESS const access) -> void {
+auto CommandList::TrackAccess(Buffer const& buf, detail::ResourceAccessScope const requested) -> void {
   if (buf.IsSealed()) {
-    assert(!d3d12::detail::IsWriteAccess(access));
+    assert(!d3d12::detail::IsWriteAccess(requested.access));
     return;
   }
 
@@ -625,48 +694,74 @@ auto CommandList::GenerateBarrier(Buffer const& buf, D3D12_BARRIER_SYNC const sy
     return;
   }
 
-  auto* const local_state{local_resource_states_.Get(buf.GetInternalResource())};
+  auto const requested_is_write = d3d12::detail::IsWriteAccess(requested.access);
+  auto* const local_state = local_buffer_states_.Get(buf.GetInternalResource());
 
-  // This builds heavily on the fact that wand::GraphicsDevice::ExecuteCommandLists
-  // dispatches each command list in its own ExecuteCommandLists scope.
-  // This way the first use of a buffer on a command list is guaranteed to also be
-  // the first use in the scope. This is important because the D3D12 Enhanced Barriers
-  // spec allows the first use of a buffer in an ECL scope to be barrier-free.
+  // wand::GraphicsDevice::ExecuteCommandLists dispatches each command list in its own ExecuteCommandLists scope,
+  // thus the first use of a buffer on a command list is also its first use in the ECL scope.
+  // - First use: no barrier, track requested
+  // - Read->read: no barrier, track current | requested
+  // - Write->read->read: 
+  //   -- if current covers requested: no barrier, no track
+  //   -- else: barrier with before = current and after = current | requested, track current | requested
+  // - Write->read: barrier with before = current and after = requested, track requested
+  // - Read->write: same
+  // - Write->write: same
+  // Written = written || requested_is_write
+
+  // First use.
   if (!local_state) {
-    local_resource_states_.Record(buf.GetInternalResource(), {
-      .accum_sync = sync,
-      .accum_access = access,
-      .layout = D3D12_BARRIER_LAYOUT_UNDEFINED
+    local_buffer_states_.Record(buf.GetInternalResource(), {
+      .current = requested,
+      .written = requested_is_write
     });
     return;
   }
 
-  auto const prev_access_was_write = d3d12::detail::IsWriteAccess(local_state->accum_access);
-  auto const this_access_is_write = d3d12::detail::IsWriteAccess(access);
+  auto const current_is_write = d3d12::detail::IsWriteAccess(local_state->current.access);
+  auto const write_involved = requested_is_write || current_is_write;
 
-  // Read -> read requires no barrier for buffers.
-  if (!prev_access_was_write && !this_access_is_write) {
-    auto const new_sync = local_state->accum_sync | sync;
-    auto const new_access = local_state->accum_access | access;
-
-    if (new_sync != local_state->accum_sync || new_access != local_state->accum_access) {
-      *local_state = {
-        .accum_sync = new_sync,
-        .accum_access = new_access,
-        .layout = D3D12_BARRIER_LAYOUT_UNDEFINED
-      };
+  // Read->read or write->read->read.
+  if (!write_involved) {
+    // Read->read.
+    if (!local_state->written) {
+      local_state->current = detail::Union(local_state->current, requested);
+      return;
     }
+
+    // Covered write->read->read.
+    if (detail::Covers(local_state->current, requested)) {
+      return;
+    }
+
+    // Write->read->read with no coverage.
+
+    auto const new_scope = detail::Union(local_state->current, requested);
+
+    auto const barrier = D3D12_BUFFER_BARRIER{
+      .SyncBefore = local_state->current.sync,
+      .SyncAfter = new_scope.sync,
+      .AccessBefore = local_state->current.access,
+      .AccessAfter = new_scope.access,
+      .pResource = buf.GetInternalResource(),
+      .Offset = 0,
+      .Size = UINT64_MAX
+    };
+
+    buffer_barriers_.emplace_back(barrier);
+
+    local_state->current = new_scope;
     return;
   }
 
-  // Either the previous access was a write or the current access is a write, so we're placing a barrier.
-  // There are some special cases that allow parallel reading and writing, but we don't support those here.
+  // Write->read or read->write, or write->write.
+  // There are some special cases that allow parallel reading and writing without barriers, but we don't support those.
 
   auto const barrier = D3D12_BUFFER_BARRIER{
-    .SyncBefore = local_state->accum_sync,
-    .SyncAfter = sync,
-    .AccessBefore = local_state->accum_access,
-    .AccessAfter = access,
+    .SyncBefore = local_state->current.sync,
+    .SyncAfter = requested.sync,
+    .AccessBefore = local_state->current.access,
+    .AccessAfter = requested.access,
     .pResource = buf.GetInternalResource(),
     .Offset = 0,
     .Size = UINT64_MAX
@@ -674,81 +769,140 @@ auto CommandList::GenerateBarrier(Buffer const& buf, D3D12_BARRIER_SYNC const sy
 
   buffer_barriers_.emplace_back(barrier);
 
-  *local_state = {
-    .accum_sync = sync,
-    .accum_access = access,
-    .layout = D3D12_BARRIER_LAYOUT_UNDEFINED
-  };
+  local_state->current = requested;
+  local_state->written = local_state->written || requested_is_write;
 }
 
 
-auto CommandList::GenerateBarrier(Texture const& tex, D3D12_BARRIER_SYNC const sync, D3D12_BARRIER_ACCESS const access,
-                                  D3D12_BARRIER_LAYOUT const layout) -> void {
+auto CommandList::TrackAccess(Texture const& tex, detail::TextureAccess const requested) -> void {
   if (tex.IsSealed()) {
-    assert(!d3d12::detail::IsWriteAccess(access) && layout == kSealedLayout);
+    assert(!d3d12::detail::IsWriteAccess(requested.scope.access) && requested.layout == kSealedLayout);
     return;
   }
 
-  auto const local_state{local_resource_states_.Get(tex.GetInternalResource())};
+  auto const requested_is_write = d3d12::detail::IsWriteAccess(requested.scope.access);
+  auto const local_state = local_texture_states_.Get(tex.GetInternalResource());
 
-  // This builds heavily on the fact that wand::GraphicsDevice::ExecuteCommandLists
-  // dispatches each command list in its own ExecuteCommandLists scope.
-  // This way the first use of a texture on a command list is guaranteed to also be
-  // the first use in the scope. This is important because the D3D12 Enhanced Barriers
-  // spec allows the first use of a texture in an ECL scope to be barrier-free provided
-  // it's in a compatible layout and its compression metadata (if applicable) is initialized.
-  // To guarantee layout compatibility, we'll transition the texture to the layout we need at submit time.
-  // This is recorded as a pending barrier.
+  // wand::GraphicsDevice::ExecuteCommandLists dispatches each command list in its own ExecuteCommandLists scope,
+  // thus the first use of a texture on a command list is also its first use in the ECL scope.
+  // Incompatible layouts: barrier with before = current and after = requested, track requested
+  // Compatible layouts and initialized compression metadata (if any):
+  // - First use: no barrier, track requested, layout compatibility guaranteed at submit time using pending barriers.
+  // - Read->read: no barrier, track current | requested
+  // - Write->read->read: 
+  //   -- if current covers requested: no barrier, no track
+  //   -- else: barrier with before = current and after = current | requested, track current | requested
+  // - Write->read: barrier with before = current and after = requested, track requested
+  // - Read->write: same
+  // - Write->write: 
+  //   -- if one is not an output merger write: same
+  //   -- else: no barrier, track current | requested
+  // Written = written || requested_is_write
+
   if (!local_state) {
-    pending_barriers_.emplace_back(layout, tex.GetInternalResource());
-    local_resource_states_.Record(tex.GetInternalResource(), {
-      .accum_sync = sync, .accum_access = access, .layout = layout
+    pending_barriers_.emplace_back(requested.layout, tex.GetInternalResource());
+    local_texture_states_.Record(tex.GetInternalResource(), {
+      .current = requested,
+      .written = requested_is_write
     });
     return;
   }
 
-  auto const needs_barrier{
-    local_state && (
-      (local_state->layout != layout) || // The layouts differ
-      (local_state->accum_access & access) != access || // The previous accesses dont cover the required access
-      (local_state->accum_sync & sync) != sync || // The previous syncs dont cover the required sync
-      ((local_state->accum_access & D3D12_BARRIER_ACCESS_UNORDERED_ACCESS) != 0
-       // The previous accesses and the required access both include UAV. Conservative but safe.
-       && (access & D3D12_BARRIER_ACCESS_UNORDERED_ACCESS) != 0)
-    )
-  };
-
-  if (!needs_barrier) {
-    *local_state = {
-      .accum_sync = local_state->accum_sync | sync,
-      .accum_access = local_state->accum_access | access,
-      .layout = layout
+  // Incompatible layout.
+  // This is too strict but safe. There could be layouts that aren't equal but still compatible.
+  if (local_state->current.layout != requested.layout) {
+    auto const barrier = D3D12_TEXTURE_BARRIER{
+      .SyncBefore = local_state->current.scope.sync,
+      .SyncAfter = requested.scope.sync,
+      .AccessBefore = local_state->current.scope.access,
+      .AccessAfter = requested.scope.access,
+      .LayoutBefore = local_state->current.layout,
+      .LayoutAfter = requested.layout,
+      .pResource = tex.GetInternalResource(),
+      .Subresources = {
+        .IndexOrFirstMipLevel = 0xffffffff, .NumMipLevels = 0, .FirstArraySlice = 0, .NumArraySlices = 0,
+        .FirstPlane = 0, .NumPlanes = 0
+      },
+      .Flags = D3D12_TEXTURE_BARRIER_FLAG_NONE
     };
+
+    texture_barriers_.emplace_back(barrier);
+
+    local_state->current = requested;
+    local_state->written = local_state->written || requested_is_write;
     return;
   }
 
-  auto const barrier = D3D12_TEXTURE_BARRIER{
-    .SyncBefore = local_state->accum_sync,
-    .SyncAfter = sync,
-    .AccessBefore = local_state->accum_access,
-    .AccessAfter = access,
-    .LayoutBefore = local_state->layout,
-    .LayoutAfter = layout,
-    .pResource = tex.GetInternalResource(),
-    .Subresources = {
-      .IndexOrFirstMipLevel = 0xffffffff, .NumMipLevels = 0, .FirstArraySlice = 0, .NumArraySlices = 0,
-      .FirstPlane = 0, .NumPlanes = 0
-    },
-    .Flags = D3D12_TEXTURE_BARRIER_FLAG_NONE
-  };
+  auto const current_is_write = d3d12::detail::IsWriteAccess(local_state->current.scope.access);
+  auto const write_involved = current_is_write || requested_is_write;
 
-  texture_barriers_.emplace_back(barrier);
+  // Read->read or write->read->read.
+  if (!write_involved) {
+    // Read->read.
+    if (!local_state->written) {
+      local_state->current.scope = detail::Union(local_state->current.scope, requested.scope);
+      return;
+    }
 
-  *local_state = {
-    .accum_sync = sync,
-    .accum_access = access,
-    .layout = layout
-  };
+    // Covered write->read->read.
+    if (detail::Covers(local_state->current.scope, requested.scope)) {
+      return;
+    }
+
+    // Write->read->read with no coverage.
+
+    auto const new_scope = detail::Union(local_state->current.scope, requested.scope);
+
+    auto const barrier = D3D12_TEXTURE_BARRIER{
+      .SyncBefore = local_state->current.scope.sync,
+      .SyncAfter = new_scope.sync,
+      .AccessBefore = local_state->current.scope.access,
+      .AccessAfter = new_scope.access,
+      .LayoutBefore = local_state->current.layout,
+      .LayoutAfter = local_state->current.layout,
+      .pResource = tex.GetInternalResource(),
+      .Subresources = {
+        .IndexOrFirstMipLevel = 0xffffffff, .NumMipLevels = 0, .FirstArraySlice = 0, .NumArraySlices = 0,
+        .FirstPlane = 0, .NumPlanes = 0
+      },
+      .Flags = D3D12_TEXTURE_BARRIER_FLAG_NONE
+    };
+
+    texture_barriers_.emplace_back(barrier);
+
+    local_state->current.scope = new_scope;
+    return;
+  }
+
+  auto const output_merger_writes = local_state->current.scope.access == requested.scope.access &&
+                                    d3d12::detail::IsOutputMergerWrite(requested.scope.access);
+
+  // Read->write, write->read, or write->write with one of them not being an OM write.
+  if (!output_merger_writes) {
+    auto const barrier = D3D12_TEXTURE_BARRIER{
+      .SyncBefore = local_state->current.scope.sync,
+      .SyncAfter = requested.scope.sync,
+      .AccessBefore = local_state->current.scope.access,
+      .AccessAfter = requested.scope.access,
+      .LayoutBefore = local_state->current.layout,
+      .LayoutAfter = requested.layout,
+      .pResource = tex.GetInternalResource(),
+      .Subresources = {
+        .IndexOrFirstMipLevel = 0xffffffff, .NumMipLevels = 0, .FirstArraySlice = 0, .NumArraySlices = 0,
+        .FirstPlane = 0, .NumPlanes = 0
+      },
+      .Flags = D3D12_TEXTURE_BARRIER_FLAG_NONE
+    };
+
+    texture_barriers_.emplace_back(barrier);
+
+    local_state->current = requested;
+    local_state->written = local_state->written || requested_is_write;
+    return;
+  }
+
+  // Write->write but both is an OM write.
+  local_state->current.scope = detail::Union(local_state->current.scope, requested.scope);
 }
 
 

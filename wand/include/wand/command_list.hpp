@@ -217,14 +217,14 @@ private:
               detail::DescriptorHeap const* rtv_heap, detail::DescriptorHeap const* res_desc_heap,
               detail::DescriptorHeap const* sampler_heap, detail::RootSignatureCache* root_signatures);
 
-  auto GenerateBarrier(Buffer const& buf, D3D12_BARRIER_SYNC sync, D3D12_BARRIER_ACCESS access) -> void;
-  auto GenerateBarrier(Texture const& tex, D3D12_BARRIER_SYNC sync, D3D12_BARRIER_ACCESS access,
-                       D3D12_BARRIER_LAYOUT layout) -> void;
+  auto TrackAccess(Buffer const& buf, detail::ResourceAccessScope requested) -> void;
+  auto TrackAccess(Texture const& tex, detail::TextureAccess requested) -> void;
   auto RecordBarriers() -> void;
 
   Microsoft::WRL::ComPtr<ID3D12CommandAllocator> allocator_;
   Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList7> cmd_list_;
-  detail::PipelineResourceStateTracker local_resource_states_;
+  detail::ResourceStateTracker<detail::PipelineBufferState> local_buffer_states_;
+  detail::ResourceStateTracker<detail::PipelineTextureState> local_texture_states_;
   std::vector<details::PendingBarrier> pending_barriers_;
   std::vector<Resource const*> sealed_in_list_;
   std::vector<Texture const*> textures_to_seal_;
