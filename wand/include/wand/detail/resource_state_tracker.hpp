@@ -36,6 +36,12 @@ struct ResourceAccessScope {
 
 
 [[nodiscard]] constexpr
+auto GetSupersededScopeBits(D3D12_BARRIER_SYNC sync) -> D3D12_BARRIER_SYNC;
+
+[[nodiscard]] constexpr
+auto ExpandAggregateScopeBits(D3D12_BARRIER_SYNC sync) -> D3D12_BARRIER_SYNC;
+
+[[nodiscard]] constexpr
 auto Covers(ResourceAccessScope const& scope, ResourceAccessScope const& other) -> bool;
 
 [[nodiscard]] constexpr
