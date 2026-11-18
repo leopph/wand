@@ -4,7 +4,7 @@
 #include <array>
 #include <bit>
 #include <cassert>
-#include <iterator>
+#include <ranges>
 #include <utility>
 
 #include "wand/common.hpp"
@@ -498,7 +498,12 @@ auto CommandList::SetPrimitiveTopology(D3D12_PRIMITIVE_TOPOLOGY const primitive_
 
 auto CommandList::SetRenderTargets(std::span<Texture const* const> const render_targets,
                                    Texture const* const depth_stencil, UINT16 const mip_level) -> void {
-  std::ranges::for_each(render_targets, [this](Texture const* const tex) {
+  assert(render_targets.size() <= D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT &&
+    "At most D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT render targets can be set.");
+  auto const rts = render_targets.first(std::min<std::size_t>(render_targets.size(),
+    D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT));
+
+  std::ranges::for_each(rts, [this](Texture const* const tex) {
     if (tex) {
       TrackAccess(*tex, {
         .scope = {.sync = D3D12_BARRIER_SYNC_RENDER_TARGET, .access = D3D12_BARRIER_ACCESS_RENDER_TARGET},
@@ -508,36 +513,37 @@ auto CommandList::SetRenderTargets(std::span<Texture const* const> const render_
   });
 
   if (depth_stencil) {
-    TrackAccess(*depth_stencil, pipeline_allows_ds_write_
-                                  ? detail::TextureAccess{
-                                    .scope = {
-                                      .sync = D3D12_BARRIER_SYNC_DEPTH_STENCIL,
-                                      .access = D3D12_BARRIER_ACCESS_DEPTH_STENCIL_WRITE
-                                    },
-                                    .layout = D3D12_BARRIER_LAYOUT_DEPTH_STENCIL_WRITE
-                                  }
-                                  : detail::TextureAccess{
-                                    .scope = {
-                                      .sync = D3D12_BARRIER_SYNC_DEPTH_STENCIL,
-                                      .access = D3D12_BARRIER_ACCESS_DEPTH_STENCIL_READ
-                                    },
-                                    .layout = D3D12_BARRIER_LAYOUT_DEPTH_STENCIL_READ
-                                  });
+    TrackAccess(*depth_stencil,
+      pipeline_allows_ds_write_
+        ? detail::TextureAccess{
+          .scope = {
+            .sync = D3D12_BARRIER_SYNC_DEPTH_STENCIL,
+            .access = D3D12_BARRIER_ACCESS_DEPTH_STENCIL_WRITE
+          },
+          .layout = D3D12_BARRIER_LAYOUT_DEPTH_STENCIL_WRITE
+        }
+        : detail::TextureAccess{
+          .scope = {
+            .sync = D3D12_BARRIER_SYNC_DEPTH_STENCIL,
+            .access = D3D12_BARRIER_ACCESS_DEPTH_STENCIL_READ
+          },
+          .layout = D3D12_BARRIER_LAYOUT_DEPTH_STENCIL_READ
+        });
   }
 
-  std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> rt_handles;
-  rt_handles.reserve(render_targets.size());
-  std::ranges::transform(render_targets, std::back_inserter(rt_handles), [this, mip_level](Texture const* const tex) {
-    return tex ? rtv_heap_->GetDescriptorCpuHandle(tex->GetRenderTargetView(mip_level)) : D3D12_CPU_DESCRIPTOR_HANDLE{};
+  auto rt_handles = std::array<D3D12_CPU_DESCRIPTOR_HANDLE, D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT>{};
+
+  std::ranges::transform(rts, rt_handles.begin(), [&](Texture const* const tex) {
+    return tex
+             ? rtv_heap_->GetDescriptorCpuHandle(tex->GetRenderTargetView(mip_level))
+             : D3D12_CPU_DESCRIPTOR_HANDLE{};
   });
 
-  auto const ds_handle{
-    depth_stencil
-      ? dsv_heap_->GetDescriptorCpuHandle(depth_stencil->GetDepthStencilView(mip_level))
-      : D3D12_CPU_DESCRIPTOR_HANDLE{}
-  };
+  auto const ds_handle = depth_stencil
+                           ? dsv_heap_->GetDescriptorCpuHandle(depth_stencil->GetDepthStencilView(mip_level))
+                           : D3D12_CPU_DESCRIPTOR_HANDLE{};
 
-  cmd_list_->OMSetRenderTargets(static_cast<UINT>(rt_handles.size()), rt_handles.data(), FALSE,
+  cmd_list_->OMSetRenderTargets(static_cast<UINT>(rts.size()), rt_handles.data(), FALSE,
     depth_stencil ? &ds_handle : nullptr);
 }
 
