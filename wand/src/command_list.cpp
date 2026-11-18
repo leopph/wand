@@ -605,7 +605,8 @@ auto CommandList::SetAccelerationStructure(ParamField<UINT> const field, Acceler
 auto CommandList::ReferenceConstantBuffer(BufferView const& buf_view) -> UINT {
   assert(HasAny(buf_view.GetDesc().usage, BufferViewUsage::kConstantBuffer));
   TrackAccess(*buf_view.GetBuffer(), {
-    .sync = D3D12_BARRIER_SYNC_ALL_SHADING, .access = D3D12_BARRIER_ACCESS_CONSTANT_BUFFER
+    .sync = D3D12_BARRIER_SYNC_ALL_SHADING | D3D12_BARRIER_SYNC_RAYTRACING,
+    .access = D3D12_BARRIER_ACCESS_CONSTANT_BUFFER
   });
   return buf_view.GetConstantBuffer();
 }
@@ -614,7 +615,8 @@ auto CommandList::ReferenceConstantBuffer(BufferView const& buf_view) -> UINT {
 auto CommandList::ReferenceShaderResource(BufferView const& buf_view) -> UINT {
   assert(HasAny(buf_view.GetDesc().usage, BufferViewUsage::kShaderResource));
   TrackAccess(*buf_view.GetBuffer(), {
-    .sync = D3D12_BARRIER_SYNC_ALL_SHADING, .access = D3D12_BARRIER_ACCESS_SHADER_RESOURCE
+    .sync = D3D12_BARRIER_SYNC_ALL_SHADING | D3D12_BARRIER_SYNC_RAYTRACING,
+    .access = D3D12_BARRIER_ACCESS_SHADER_RESOURCE
   });
   return buf_view.GetShaderResource();
 }
@@ -622,7 +624,10 @@ auto CommandList::ReferenceShaderResource(BufferView const& buf_view) -> UINT {
 
 auto CommandList::ReferenceShaderResource(Texture const& tex) -> UINT {
   TrackAccess(tex, {
-    .scope = {.sync = D3D12_BARRIER_SYNC_ALL_SHADING, .access = D3D12_BARRIER_ACCESS_SHADER_RESOURCE},
+    .scope = {
+      .sync = D3D12_BARRIER_SYNC_ALL_SHADING | D3D12_BARRIER_SYNC_RAYTRACING,
+      .access = D3D12_BARRIER_ACCESS_SHADER_RESOURCE
+    },
     .layout = D3D12_BARRIER_LAYOUT_DIRECT_QUEUE_SHADER_RESOURCE
   });
   return tex.GetShaderResource();
@@ -632,7 +637,8 @@ auto CommandList::ReferenceShaderResource(Texture const& tex) -> UINT {
 auto CommandList::ReferenceUnorderedAccess(BufferView const& buf_view) -> UINT {
   assert(HasAny(buf_view.GetDesc().usage, BufferViewUsage::kUnorderedAccess));
   TrackAccess(*buf_view.GetBuffer(), {
-    .sync = D3D12_BARRIER_SYNC_ALL_SHADING, .access = D3D12_BARRIER_ACCESS_UNORDERED_ACCESS
+    .sync = D3D12_BARRIER_SYNC_ALL_SHADING | D3D12_BARRIER_SYNC_RAYTRACING,
+    .access = D3D12_BARRIER_ACCESS_UNORDERED_ACCESS
   });
   return buf_view.GetUnorderedAccess();
 }
@@ -640,7 +646,10 @@ auto CommandList::ReferenceUnorderedAccess(BufferView const& buf_view) -> UINT {
 
 auto CommandList::ReferenceUnorderedAccess(Texture const& tex) -> UINT {
   TrackAccess(tex, {
-    .scope = {.sync = D3D12_BARRIER_SYNC_ALL_SHADING, .access = D3D12_BARRIER_ACCESS_UNORDERED_ACCESS},
+    .scope = {
+      .sync = D3D12_BARRIER_SYNC_ALL_SHADING | D3D12_BARRIER_SYNC_RAYTRACING,
+      .access = D3D12_BARRIER_ACCESS_UNORDERED_ACCESS
+    },
     .layout = D3D12_BARRIER_LAYOUT_DIRECT_QUEUE_UNORDERED_ACCESS
   });
   return tex.GetUnorderedAccess();
@@ -651,7 +660,7 @@ auto CommandList::ReferenceAccelerationStructure(AccelerationStructure const& as
   assert(
     as.GetDesc().type == AccelerationStructureType::kTopLevel && "an AS referenced on the pipeline must be top-level.");
   TrackAccess(*as.GetBuffer(), {
-    .sync = D3D12_BARRIER_SYNC_ALL_SHADING,
+    .sync = D3D12_BARRIER_SYNC_ALL_SHADING | D3D12_BARRIER_SYNC_RAYTRACING,
     .access = D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_READ
   });
   return as.GetShaderResource();
