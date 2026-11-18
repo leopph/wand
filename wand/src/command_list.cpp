@@ -808,7 +808,10 @@ auto CommandList::TrackAccess(Texture const& tex, detail::TextureAccess const re
   // - Read->read: no barrier, track current | requested
   // - Write->read->read: 
   //   -- if current covers requested: no barrier, no track
-  //   -- else: barrier with before = current and after = current | requested, track current | requested
+  //   -- else:
+  //      -- if the previous barrier has not yet been recorded: patch it with {SyncAfter, AccessAfter} | requested,
+  //         track {SyncAfter, AccessAfter} | requested
+  //      -- else: barrier with before = current and after = current | requested, track current | requested
   // - Write->read: barrier with before = current and after = requested, track requested
   // - Read->write: same
   // - Write->write: 
@@ -825,16 +828,19 @@ auto CommandList::TrackAccess(Texture const& tex, detail::TextureAccess const re
     return;
   }
 
-  // Incompatible layout.
-  // This is too strict but safe. There could be layouts that aren't equal but still compatible.
-  if (local_state->current.layout != requested.layout) {
-    auto const barrier = D3D12_TEXTURE_BARRIER{
+  auto const is_compatible = [](D3D12_BARRIER_LAYOUT const layout1, D3D12_BARRIER_LAYOUT const layout2) {
+    // This is stricter than necessary but safe. There could be layouts that aren't equal but still compatible.
+    return layout1 == layout2;
+  };
+
+  auto const make_barrier = [&](detail::TextureAccess const after) {
+    return D3D12_TEXTURE_BARRIER{
       .SyncBefore = local_state->current.scope.sync,
-      .SyncAfter = requested.scope.sync,
+      .SyncAfter = after.scope.sync,
       .AccessBefore = local_state->current.scope.access,
-      .AccessAfter = requested.scope.access,
+      .AccessAfter = after.scope.access,
       .LayoutBefore = local_state->current.layout,
-      .LayoutAfter = requested.layout,
+      .LayoutAfter = after.layout,
       .pResource = tex.GetInternalResource(),
       .Subresources = {
         .IndexOrFirstMipLevel = 0xffffffff, .NumMipLevels = 0, .FirstArraySlice = 0, .NumArraySlices = 0,
@@ -842,9 +848,11 @@ auto CommandList::TrackAccess(Texture const& tex, detail::TextureAccess const re
       },
       .Flags = D3D12_TEXTURE_BARRIER_FLAG_NONE
     };
+  };
 
-    texture_barriers_.emplace_back(barrier);
-
+  // Incompatible layout.
+  if (!is_compatible(local_state->current.layout, requested.layout)) {
+    texture_barriers_.emplace_back(make_barrier(requested));
     local_state->current = requested;
     local_state->written = local_state->written || requested_is_write;
     return;
@@ -868,25 +876,21 @@ auto CommandList::TrackAccess(Texture const& tex, detail::TextureAccess const re
 
     // Write->read->read with no coverage.
 
+    // Instead of placing another barrier with no work between it and the last one, we try patching the previous one
+    // with this request. If there hasn't been work recorded since that barrier, it is still in the list. If it is not
+    // in the list, it has already been recorded and we cannot patch it.
+
+    if (auto const [it, end] = std::ranges::find_last(texture_barriers_, tex.GetInternalResource(),
+      &D3D12_TEXTURE_BARRIER::pResource); it != end) {
+      auto const new_scope = detail::Union({.sync = it->SyncAfter, .access = it->AccessAfter}, requested.scope);
+      it->SyncAfter = new_scope.sync;
+      it->AccessAfter = new_scope.access;
+      local_state->current.scope = new_scope;
+      return;
+    }
+
     auto const new_scope = detail::Union(local_state->current.scope, requested.scope);
-
-    auto const barrier = D3D12_TEXTURE_BARRIER{
-      .SyncBefore = local_state->current.scope.sync,
-      .SyncAfter = new_scope.sync,
-      .AccessBefore = local_state->current.scope.access,
-      .AccessAfter = new_scope.access,
-      .LayoutBefore = local_state->current.layout,
-      .LayoutAfter = local_state->current.layout,
-      .pResource = tex.GetInternalResource(),
-      .Subresources = {
-        .IndexOrFirstMipLevel = 0xffffffff, .NumMipLevels = 0, .FirstArraySlice = 0, .NumArraySlices = 0,
-        .FirstPlane = 0, .NumPlanes = 0
-      },
-      .Flags = D3D12_TEXTURE_BARRIER_FLAG_NONE
-    };
-
-    texture_barriers_.emplace_back(barrier);
-
+    texture_barriers_.emplace_back(make_barrier({.scope = new_scope, .layout = local_state->current.layout}));
     local_state->current.scope = new_scope;
     return;
   }
@@ -896,23 +900,7 @@ auto CommandList::TrackAccess(Texture const& tex, detail::TextureAccess const re
 
   // Read->write, write->read, or write->write with one of them not being an OM write.
   if (!output_merger_writes) {
-    auto const barrier = D3D12_TEXTURE_BARRIER{
-      .SyncBefore = local_state->current.scope.sync,
-      .SyncAfter = requested.scope.sync,
-      .AccessBefore = local_state->current.scope.access,
-      .AccessAfter = requested.scope.access,
-      .LayoutBefore = local_state->current.layout,
-      .LayoutAfter = requested.layout,
-      .pResource = tex.GetInternalResource(),
-      .Subresources = {
-        .IndexOrFirstMipLevel = 0xffffffff, .NumMipLevels = 0, .FirstArraySlice = 0, .NumArraySlices = 0,
-        .FirstPlane = 0, .NumPlanes = 0
-      },
-      .Flags = D3D12_TEXTURE_BARRIER_FLAG_NONE
-    };
-
-    texture_barriers_.emplace_back(barrier);
-
+    texture_barriers_.emplace_back(make_barrier(requested));
     local_state->current = requested;
     local_state->written = local_state->written || requested_is_write;
     return;
