@@ -178,6 +178,11 @@ public:
   WANDAPI
   auto SetPipelineParameters(UINT index, std::span<UINT const> values) const -> void;
 
+  /* A resource bound with SetShaderResource, SetUnorderedAccess, SetConstantBuffer, SetAccelerationStructure,
+   * SetIndexBuffer or SetRenderTargets stays valid for subsequent draws and dispatches only as long as the command
+   * list does nothing else with that resource. Copies, clears, discards, resolves, acceleration-structure builds and
+   * Use* on it invalidate the binding: bind it again before the next draw or dispatch that uses it. */
+
   WANDAPI
   auto SetConstantBuffer(UINT param_idx, BufferView const& buf_view) -> void;
 
