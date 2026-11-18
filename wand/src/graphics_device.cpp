@@ -246,11 +246,6 @@ auto GraphicsDevice::CreateBuffer(BufferDesc const& desc,
   ThrowIfFailed(allocator_->CreateResource3(&alloc_desc, &res_desc, D3D12_BARRIER_LAYOUT_UNDEFINED, nullptr, 0, nullptr,
     &allocation, IID_PPV_ARGS(&resource)), "Failed to create buffer.");
 
-  {
-    std::scoped_lock const lck{state_tracker_mutex_};
-    global_resource_states_.Record(resource.Get(), {.layout = D3D12_BARRIER_LAYOUT_UNDEFINED});
-  }
-
   return SharedDeviceHandle<Buffer>{
     new Buffer{std::move(allocation), std::move(resource), desc},
     DeviceObjectDeleter<Buffer>{*this}
@@ -622,13 +617,10 @@ auto GraphicsDevice::CreateAccelerationStructure(AccelerationStructureDesc const
 }
 
 
+// ReSharper disable once CppMemberFunctionMayBeStatic
+// Logically a non-static member.
 auto GraphicsDevice::DestroyBuffer(Buffer const* const buffer) -> void {
   if (buffer) {
-    {
-      std::scoped_lock const lck{state_tracker_mutex_};
-      global_resource_states_.Erase(buffer->resource_.Get());
-    }
-
     delete buffer;
   }
 }
