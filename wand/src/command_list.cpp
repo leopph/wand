@@ -703,7 +703,10 @@ auto CommandList::TrackAccess(Buffer const& buf, detail::ResourceAccessScope con
   // - Read->read: no barrier, track current | requested
   // - Write->read->read: 
   //   -- if current covers requested: no barrier, no track
-  //   -- else: barrier with before = current and after = current | requested, track current | requested
+  //   -- else:
+  //      -- if the previous barrier has not yet been recorded: patch it with {SyncAfter, AccessAfter} | requested,
+  //         track {SyncAfter, AccessAfter} | requested
+  //      -- else: barrier with before = current and after = current | requested, track current | requested
   // - Write->read: barrier with before = current and after = requested, track requested
   // - Read->write: same
   // - Write->write: same
@@ -735,6 +738,19 @@ auto CommandList::TrackAccess(Buffer const& buf, detail::ResourceAccessScope con
     }
 
     // Write->read->read with no coverage.
+
+    // Instead of placing another barrier with no work between it and the last one, we try patching the previous one
+    // with this request. If there hasn't been work recorded since that barrier, it is still in the list. If it is not
+    // in the list, it has already been recorded and we cannot patch it.
+
+    if (auto const [it, end] = std::ranges::find_last(buffer_barriers_, buf.GetInternalResource(),
+      &D3D12_BUFFER_BARRIER::pResource); it != end) {
+      auto const new_scope = detail::Union({.sync = it->SyncAfter, .access = it->AccessAfter}, requested);
+      it->SyncAfter = new_scope.sync;
+      it->AccessAfter = new_scope.access;
+      local_state->current = new_scope;
+      return;
+    }
 
     auto const new_scope = detail::Union(local_state->current, requested);
 
