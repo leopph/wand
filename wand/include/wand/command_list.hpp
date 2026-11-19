@@ -17,7 +17,7 @@
 #include <wand/texture.hpp>
 #include <wand/wandapi.hpp>
 #include <wand/detail/descriptor_heap.hpp>
-#include <wand/detail/resource_state_tracker.hpp>
+#include <wand/detail/resource_tracking.hpp>
 #include <wand/detail/root_signature_cache.hpp>
 
 

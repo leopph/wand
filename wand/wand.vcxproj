@@ -101,6 +101,7 @@
       <WarningLevel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">TurnOffAllWarnings</WarningLevel>
       <WarningLevel Condition="'$(Configuration)|$(Platform)'=='Release|x64'">TurnOffAllWarnings</WarningLevel>
     </ClCompile>
+    <ClCompile Include="src\detail\resource_tracking.cpp" />
     <ClCompile Include="src\buffer_helpers.cpp" />
     <ClCompile Include="src\buffer_view.cpp" />
     <ClCompile Include="src\detail\as_utils.cpp" />
@@ -146,7 +147,7 @@
     <ClInclude Include="include\wand\format.hpp" />
     <ClInclude Include="include\wand\pipeline.hpp" />
     <ClInclude Include="include\wand\resource.hpp" />
-    <ClInclude Include="include\wand\detail\resource_state_tracker.hpp" />
+    <ClInclude Include="include\wand\detail\resource_tracking.hpp" />
     <ClInclude Include="include\wand\detail\root_signature_cache.hpp" />
     <ClInclude Include="include\wand\acceleration_structure.hpp" />
     <ClInclude Include="include\wand\sampler.hpp" />
@@ -163,7 +164,7 @@
     <None Include="include\wand\buffer_region.inl" />
     <None Include="include\wand\command_list.inl" />
     <None Include="include\wand\flags.inl" />
-    <None Include="include\wand\detail\resource_state_tracker.inl" />
+    <None Include="include\wand\detail\resource_tracking.inl" />
     <None Include="include\wand\pipeline_parameter.inl" />
     <None Include="include\wand\util.inl" />
     <None Include="packages.config" />

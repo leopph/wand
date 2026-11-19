@@ -84,6 +84,9 @@
     <ClCompile Include="src\detail\as_utils.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="src\detail\resource_tracking.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\wand\wand.hpp">
@@ -134,7 +137,7 @@
     <ClInclude Include="include\wand\detail\root_signature_cache.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="include\wand\detail\resource_state_tracker.hpp">
+    <ClInclude Include="include\wand\detail\resource_tracking.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\wand\barrier.hpp">
@@ -187,7 +190,7 @@
     <None Include="include\wand\util.inl">
       <Filter>Header Files</Filter>
     </None>
-    <None Include="include\wand\detail\resource_state_tracker.inl">
+    <None Include="include\wand\detail\resource_tracking.inl">
       <Filter>Header Files</Filter>
     </None>
     <None Include="include\wand\flags.inl">

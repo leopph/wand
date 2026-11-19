@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <unordered_map>
 
 #include <wand/platforms/d3d12.hpp>
@@ -35,16 +36,16 @@ struct ResourceAccessScope {
 };
 
 
-[[nodiscard]] constexpr
+[[nodiscard]]
 auto GetSupersededScopeBits(D3D12_BARRIER_SYNC sync) -> D3D12_BARRIER_SYNC;
 
-[[nodiscard]] constexpr
+[[nodiscard]]
 auto ExpandAggregateScopeBits(D3D12_BARRIER_SYNC sync) -> D3D12_BARRIER_SYNC;
 
-[[nodiscard]] constexpr
+[[nodiscard]]
 auto Covers(ResourceAccessScope const& scope, ResourceAccessScope const& other) -> bool;
 
-[[nodiscard]] constexpr
+[[nodiscard]]
 auto Union(ResourceAccessScope const& scope1, ResourceAccessScope const& scope2) -> ResourceAccessScope;
 
 
@@ -72,7 +73,28 @@ struct GlobalResourceState {
 
 
 using GlobalResourceStateTracker = ResourceStateTracker<GlobalResourceState>;
+
+
+enum class AccessTransition : std::uint8_t {
+  // The latest barrier already covers the request: nothing to do.
+  kAlreadyCovered,
+  // No hazard and nothing to make visible: OR the request into the tracked scope.
+  kMergeWithoutBarrier,
+  // A new kind of read after a write: extend the latest barrier's after scope (widen it if it's still pending, else
+  // chain a new one).
+  kExtendLatestBarrier,
+  // Layout change or a write involved: barrier from the tracked scope to the request.
+  kPlaceBarrier,
+};
+
+
+[[nodiscard]]
+auto ClassifyTransition(ResourceAccessScope const& current, ResourceAccessScope const& requested,
+                        bool written) -> AccessTransition;
+
+[[nodiscard]]
+auto ClassifyTransition(TextureAccess const& current, TextureAccess const& requested, bool written) -> AccessTransition;
 }
 
 
-#include <wand/detail/resource_state_tracker.inl>
+#include <wand/detail/resource_tracking.inl>

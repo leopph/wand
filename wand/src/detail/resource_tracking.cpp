@@ -1,54 +1,10 @@
-#pragma once
+#include "wand/detail/resource_tracking.hpp"
 
-#include "resource_state_tracker.hpp"
-
-#include <iterator>
+#include "wand/platforms/detail/d3d12_internals.hpp"
 
 
 namespace wand::detail {
-template<typename ResourceStateType>
-auto ResourceStateTracker<ResourceStateType>::Record(ID3D12Resource* const resource,
-                                                     ResourceStateType const state) -> void {
-  resource_states_[resource] = state;
-}
-
-
-template<typename ResourceStateType>
-auto ResourceStateTracker<ResourceStateType>::Erase(ID3D12Resource* const resource) -> void {
-  resource_states_.erase(resource);
-}
-
-
-template<typename ResourceStateType>
-auto ResourceStateTracker<ResourceStateType>::Get(
-  ID3D12Resource* const resource) -> ResourceStateType* {
-  if (auto const it{resource_states_.find(resource)}; it != std::end(resource_states_)) {
-    return &it->second;
-  }
-
-  return nullptr;
-}
-
-
-template<typename ResourceStateType>
-auto ResourceStateTracker<ResourceStateType>::Clear() -> void {
-  resource_states_.clear();
-}
-
-
-template<typename ResourceStateType>
-auto ResourceStateTracker<ResourceStateType>::begin() const {
-  return std::begin(resource_states_);
-}
-
-
-template<typename ResourceStateType>
-auto ResourceStateTracker<ResourceStateType>::end() const {
-  return std::end(resource_states_);
-}
-
-
-constexpr auto GetSupersededScopeBits(D3D12_BARRIER_SYNC const sync) -> D3D12_BARRIER_SYNC {
+auto GetSupersededScopeBits(D3D12_BARRIER_SYNC const sync) -> D3D12_BARRIER_SYNC {
   if (sync == D3D12_BARRIER_SYNC_ALL) {
     return D3D12_BARRIER_SYNC_DRAW
            | D3D12_BARRIER_SYNC_INDEX_INPUT
@@ -91,7 +47,7 @@ constexpr auto GetSupersededScopeBits(D3D12_BARRIER_SYNC const sync) -> D3D12_BA
 }
 
 
-constexpr auto ExpandAggregateScopeBits(D3D12_BARRIER_SYNC const sync) -> D3D12_BARRIER_SYNC {
+auto ExpandAggregateScopeBits(D3D12_BARRIER_SYNC const sync) -> D3D12_BARRIER_SYNC {
   auto ret = auto{sync};
 
   if ((ret & D3D12_BARRIER_SYNC_ALL) == D3D12_BARRIER_SYNC_ALL) {
@@ -118,12 +74,12 @@ constexpr auto ExpandAggregateScopeBits(D3D12_BARRIER_SYNC const sync) -> D3D12_
 }
 
 
-constexpr auto Covers(ResourceAccessScope const& scope, ResourceAccessScope const& other) -> bool {
+auto Covers(ResourceAccessScope const& scope, ResourceAccessScope const& other) -> bool {
   // NO_ACCESS != 0, so it needs special handling.
   // NO_ACCESS is covered by everything.
   // NO_ACCESS covers nothing but NO_ACCESS.
 
-  // Sync can contain aggregate bits can be treated as though all of the superseded scope bits are set.
+  // Aggregate sync bits are treated as though all of their superseded bits are set.
 
   auto const expanded_scope_sync = ExpandAggregateScopeBits(scope.sync);
   auto const expanded_other_sync = ExpandAggregateScopeBits(other.sync);
@@ -138,7 +94,7 @@ constexpr auto Covers(ResourceAccessScope const& scope, ResourceAccessScope cons
 }
 
 
-constexpr auto Union(ResourceAccessScope const& scope1, ResourceAccessScope const& scope2) -> ResourceAccessScope {
+auto Union(ResourceAccessScope const& scope1, ResourceAccessScope const& scope2) -> ResourceAccessScope {
   // NO_ACCESS cannot be combined with other bits, so it needs special handling.
   // scope1 == NO_ACCESS && scope2 == other -> scope2
   // scope1 == other && scope2 == NO_ACCESS -> scope1
@@ -152,5 +108,38 @@ constexpr auto Union(ResourceAccessScope const& scope1, ResourceAccessScope cons
                     ? scope1.access
                     : scope1.access | scope2.access
   };
+}
+
+
+auto ClassifyTransition(ResourceAccessScope const& current, ResourceAccessScope const& requested,
+                        bool const written) -> AccessTransition {
+  // Write->read, read->write, or write->write
+  if (d3d12::detail::IsWriteAccess(current.access) || d3d12::detail::IsWriteAccess(requested.access)) {
+    return AccessTransition::kPlaceBarrier;
+  }
+  // Read->read
+  if (!written) {
+    return AccessTransition::kMergeWithoutBarrier;
+  }
+  // Write->read->read where the last barrier already covered the requested usage
+  if (Covers(current, requested)) {
+    return AccessTransition::kAlreadyCovered;
+  }
+  // Write->read->read where the requested usage was not covered by the last barrier
+  return AccessTransition::kExtendLatestBarrier;
+}
+
+
+auto ClassifyTransition(TextureAccess const& current, TextureAccess const& requested,
+                        bool const written) -> AccessTransition {
+  // This is stricter than necessary but safe. There could be layouts that aren't equal but still compatible.
+  if (current.layout != requested.layout) {
+    return AccessTransition::kPlaceBarrier;
+  }
+  // Subsequent OM writes don't need a barrier.
+  if (current.scope.access == requested.scope.access && d3d12::detail::IsOutputMergerWrite(requested.scope.access)) {
+    return AccessTransition::kMergeWithoutBarrier;
+  }
+  return ClassifyTransition(current.scope, requested.scope, written);
 }
 }

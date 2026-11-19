@@ -732,21 +732,6 @@ auto CommandList::TrackAccess(Buffer const& buf, detail::ResourceAccessScope con
   auto const requested_is_write = d3d12::detail::IsWriteAccess(requested.access);
   auto* const local_state = local_buffer_states_.Get(buf.GetInternalResource());
 
-  // wand::GraphicsDevice::ExecuteCommandLists dispatches each command list in its own ExecuteCommandLists scope,
-  // thus the first use of a buffer on a command list is also its first use in the ECL scope.
-  // - First use: no barrier, track requested
-  // - Read->read: no barrier, track current | requested
-  // - Write->read->read: 
-  //   -- if current covers requested: no barrier, no track
-  //   -- else:
-  //      -- if the previous barrier has not yet been recorded: patch it with {SyncAfter, AccessAfter} | requested,
-  //         track {SyncAfter, AccessAfter} | requested
-  //      -- else: barrier with before = current and after = current | requested, track current | requested
-  // - Write->read: barrier with before = current and after = requested, track requested
-  // - Read->write: same
-  // - Write->write: same
-  // Written = written || requested_is_write
-
   // First use.
   if (!local_state) {
     local_buffer_states_.Record(buf.GetInternalResource(), {
@@ -756,72 +741,51 @@ auto CommandList::TrackAccess(Buffer const& buf, detail::ResourceAccessScope con
     return;
   }
 
-  auto const current_is_write = d3d12::detail::IsWriteAccess(local_state->current.access);
-  auto const write_involved = requested_is_write || current_is_write;
-
-  // Read->read or write->read->read.
-  if (!write_involved) {
-    // Read->read.
-    if (!local_state->written) {
-      local_state->current = detail::Union(local_state->current, requested);
-      return;
-    }
-
-    // Covered write->read->read.
-    if (detail::Covers(local_state->current, requested)) {
-      return;
-    }
-
-    // Write->read->read with no coverage.
-
-    // Instead of placing another barrier with no work between it and the last one, we try patching the previous one
-    // with this request. If there hasn't been work recorded since that barrier, it is still in the list. If it is not
-    // in the list, it has already been recorded and we cannot patch it.
-
-    if (auto const [it, end] = std::ranges::find_last(buffer_barriers_, buf.GetInternalResource(),
-      &D3D12_BUFFER_BARRIER::pResource); it != end) {
-      auto const new_scope = detail::Union({.sync = it->SyncAfter, .access = it->AccessAfter}, requested);
-      it->SyncAfter = new_scope.sync;
-      it->AccessAfter = new_scope.access;
-      local_state->current = new_scope;
-      return;
-    }
-
-    auto const new_scope = detail::Union(local_state->current, requested);
-
-    auto const barrier = D3D12_BUFFER_BARRIER{
+  auto const make_barrier = [&](detail::ResourceAccessScope const& after) {
+    return D3D12_BUFFER_BARRIER{
       .SyncBefore = local_state->current.sync,
-      .SyncAfter = new_scope.sync,
+      .SyncAfter = after.sync,
       .AccessBefore = local_state->current.access,
-      .AccessAfter = new_scope.access,
+      .AccessAfter = after.access,
       .pResource = buf.GetInternalResource(),
       .Offset = 0,
       .Size = UINT64_MAX
     };
-
-    buffer_barriers_.emplace_back(barrier);
-
-    local_state->current = new_scope;
-    return;
-  }
-
-  // Write->read or read->write, or write->write.
-  // There are some special cases that allow parallel reading and writing without barriers, but we don't support those.
-
-  auto const barrier = D3D12_BUFFER_BARRIER{
-    .SyncBefore = local_state->current.sync,
-    .SyncAfter = requested.sync,
-    .AccessBefore = local_state->current.access,
-    .AccessAfter = requested.access,
-    .pResource = buf.GetInternalResource(),
-    .Offset = 0,
-    .Size = UINT64_MAX
   };
 
-  buffer_barriers_.emplace_back(barrier);
+  switch (detail::ClassifyTransition(local_state->current, requested, local_state->written)) {
+    case detail::AccessTransition::kPlaceBarrier: {
+      buffer_barriers_.emplace_back(make_barrier(requested));
+      local_state->current = requested;
+      local_state->written = local_state->written || requested_is_write;
+      break;
+    }
 
-  local_state->current = requested;
-  local_state->written = local_state->written || requested_is_write;
+    case detail::AccessTransition::kMergeWithoutBarrier: {
+      local_state->current = detail::Union(local_state->current, requested);
+      break;
+    }
+
+    case detail::AccessTransition::kAlreadyCovered: {
+      break;
+    }
+
+    case detail::AccessTransition::kExtendLatestBarrier: {
+      if (auto const [it, end] = std::ranges::find_last(buffer_barriers_, buf.GetInternalResource(),
+        &D3D12_BUFFER_BARRIER::pResource); it != end) {
+        auto const new_scope = detail::Union({.sync = it->SyncAfter, .access = it->AccessAfter}, requested);
+        it->SyncAfter = new_scope.sync;
+        it->AccessAfter = new_scope.access;
+        local_state->current = new_scope;
+        break;
+      }
+
+      auto const new_scope = detail::Union(local_state->current, requested);
+      buffer_barriers_.emplace_back(make_barrier(new_scope));
+      local_state->current = new_scope;
+      break;
+    }
+  }
 }
 
 
@@ -834,26 +798,7 @@ auto CommandList::TrackAccess(Texture const& tex, detail::TextureAccess const re
   auto const requested_is_write = d3d12::detail::IsWriteAccess(requested.scope.access);
   auto const local_state = local_texture_states_.Get(tex.GetInternalResource());
 
-  // wand::GraphicsDevice::ExecuteCommandLists dispatches each command list in its own ExecuteCommandLists scope,
-  // thus the first use of a texture on a command list is also its first use in the ECL scope.
-  // Incompatible layouts: barrier with before = current and after = requested, track requested
-  // Compatible layouts and initialized compression metadata (if any):
-  // - First use: no barrier, track requested, layout compatibility guaranteed at submit time using layout transition
-  //   barriers created from the required initial layouts.
-  // - Read->read: no barrier, track current | requested
-  // - Write->read->read: 
-  //   -- if current covers requested: no barrier, no track
-  //   -- else:
-  //      -- if the previous barrier has not yet been recorded: patch it with {SyncAfter, AccessAfter} | requested,
-  //         track {SyncAfter, AccessAfter} | requested
-  //      -- else: barrier with before = current and after = current | requested, track current | requested
-  // - Write->read: barrier with before = current and after = requested, track requested
-  // - Read->write: same
-  // - Write->write: 
-  //   -- if one is not an output merger write: same
-  //   -- else: no barrier, track current | requested
-  // Written = written || requested_is_write
-
+  // First use.
   if (!local_state) {
     required_initial_layouts_.emplace_back(requested.layout, tex.GetInternalResource());
     local_texture_states_.Record(tex.GetInternalResource(), {
@@ -862,11 +807,6 @@ auto CommandList::TrackAccess(Texture const& tex, detail::TextureAccess const re
     });
     return;
   }
-
-  auto const is_compatible = [](D3D12_BARRIER_LAYOUT const layout1, D3D12_BARRIER_LAYOUT const layout2) {
-    // This is stricter than necessary but safe. There could be layouts that aren't equal but still compatible.
-    return layout1 == layout2;
-  };
 
   auto const make_barrier = [&](detail::TextureAccess const after) {
     return D3D12_TEXTURE_BARRIER{
@@ -885,64 +825,39 @@ auto CommandList::TrackAccess(Texture const& tex, detail::TextureAccess const re
     };
   };
 
-  // Incompatible layout.
-  if (!is_compatible(local_state->current.layout, requested.layout)) {
-    texture_barriers_.emplace_back(make_barrier(requested));
-    local_state->current = requested;
-    local_state->written = local_state->written || requested_is_write;
-    return;
-  }
+  switch (detail::ClassifyTransition(local_state->current, requested, local_state->written)) {
+    case detail::AccessTransition::kPlaceBarrier: {
+      texture_barriers_.emplace_back(make_barrier(requested));
+      local_state->current = requested;
+      local_state->written = local_state->written || requested_is_write;
+      break;
+    }
 
-  auto const current_is_write = d3d12::detail::IsWriteAccess(local_state->current.scope.access);
-  auto const write_involved = current_is_write || requested_is_write;
-
-  // Read->read or write->read->read.
-  if (!write_involved) {
-    // Read->read.
-    if (!local_state->written) {
+    case detail::AccessTransition::kMergeWithoutBarrier: {
       local_state->current.scope = detail::Union(local_state->current.scope, requested.scope);
-      return;
+      break;
     }
 
-    // Covered write->read->read.
-    if (detail::Covers(local_state->current.scope, requested.scope)) {
-      return;
+    case detail::AccessTransition::kAlreadyCovered: {
+      break;
     }
 
-    // Write->read->read with no coverage.
+    case detail::AccessTransition::kExtendLatestBarrier: {
+      if (auto const [it, end] = std::ranges::find_last(texture_barriers_, tex.GetInternalResource(),
+        &D3D12_TEXTURE_BARRIER::pResource); it != end) {
+        auto const new_scope = detail::Union({.sync = it->SyncAfter, .access = it->AccessAfter}, requested.scope);
+        it->SyncAfter = new_scope.sync;
+        it->AccessAfter = new_scope.access;
+        local_state->current.scope = new_scope;
+        break;
+      }
 
-    // Instead of placing another barrier with no work between it and the last one, we try patching the previous one
-    // with this request. If there hasn't been work recorded since that barrier, it is still in the list. If it is not
-    // in the list, it has already been recorded and we cannot patch it.
-
-    if (auto const [it, end] = std::ranges::find_last(texture_barriers_, tex.GetInternalResource(),
-      &D3D12_TEXTURE_BARRIER::pResource); it != end) {
-      auto const new_scope = detail::Union({.sync = it->SyncAfter, .access = it->AccessAfter}, requested.scope);
-      it->SyncAfter = new_scope.sync;
-      it->AccessAfter = new_scope.access;
+      auto const new_scope = detail::Union(local_state->current.scope, requested.scope);
+      texture_barriers_.emplace_back(make_barrier({.scope = new_scope, .layout = local_state->current.layout}));
       local_state->current.scope = new_scope;
-      return;
+      break;
     }
-
-    auto const new_scope = detail::Union(local_state->current.scope, requested.scope);
-    texture_barriers_.emplace_back(make_barrier({.scope = new_scope, .layout = local_state->current.layout}));
-    local_state->current.scope = new_scope;
-    return;
   }
-
-  auto const output_merger_writes = local_state->current.scope.access == requested.scope.access &&
-                                    d3d12::detail::IsOutputMergerWrite(requested.scope.access);
-
-  // Read->write, write->read, or write->write with one of them not being an OM write.
-  if (!output_merger_writes) {
-    texture_barriers_.emplace_back(make_barrier(requested));
-    local_state->current = requested;
-    local_state->written = local_state->written || requested_is_write;
-    return;
-  }
-
-  // Write->write but both is an OM write.
-  local_state->current.scope = detail::Union(local_state->current.scope, requested.scope);
 }
 
 
