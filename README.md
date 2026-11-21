@@ -9,7 +9,7 @@ Wand currently targets **Windows and Direct3D 12 only**. It is a work in progres
 ## Features
 
 - **Automatic memory allocation:** buffers and textures are allocated using [D3D12 Memory Allocator](https://github.com/GPUOpen-LibrariesAndSDKs/D3D12MemoryAllocator), with allocations released when their owning resources are destroyed.
-- **Automatic state tracking:** resource usage is tracked across command lists, with barriers generated for supported operations.
+- **Automatic state tracking:** resource usage is tracked across command lists, with barriers generated for supported operations. Several command lists can be submitted together, and the barriers needed between them are generated at submission.
 - **Bindless resource binding:** automatically allocated descriptors, directly indexed resource and sampler heaps, and generated root signatures without per-draw descriptor tables.
 - **Rendering and compute:** graphics and compute pipelines, draw and dispatch commands, and mesh-shader dispatch.
 - **Raytracing API:** raytracing state objects, acceleration-structure builds, and ray dispatch.
@@ -67,7 +67,7 @@ float4 SampleTexture(float2 uv) {
 
 `SetShaderResource`, `SetUnorderedAccess`, `SetConstantBuffer`, and `SetAccelerationStructure` write a resource's descriptor index into a parameter and also tell Wand how the resource is accessed, allowing it to track state and insert necessary barriers. Their `Reference*` counterparts do the same but return the index instead, for filling in a whole parameter block. `SetPipelineParameter` sets any other value, such as a sampler index, a float, or a whole struct, and `SetPipelineParameters` takes raw 32-bit values.
 
-**Important:** when shaders obtain descriptor indices indirectly (for example, from a material buffer), Wand cannot automatically infer those resource accesses from the shader. Automatic state tracking applies to accesses Wand sees through its commands.
+**Important:** when shaders obtain descriptor indices indirectly (for example, from a material buffer), Wand cannot automatically infer those resource accesses from the shader. Automatic state tracking applies to accesses Wand sees through its commands. For other accesses, declare them with `UseBuffer` or `UseTexture` before the draw or dispatch.
 
 ## Getting started
 
@@ -91,7 +91,7 @@ To use Wand in another Visual Studio project, add a reference to `wand/wand.vcxp
 ### Minimal example
 
 ```cpp
-#include <span>
+#include <array>
 
 #include <wand/wand.hpp>
 
@@ -114,7 +114,7 @@ int main() {
     cmd->CopyBuffer(*dst_buf, *src_buf);
     cmd->End();
 
-    device.ExecuteCommandLists(std::span{cmd.get(), 1});
+    device.SubmitCommandLists(std::array{cmd.get()});
     device.WaitIdle();
 }
 ```
@@ -143,5 +143,5 @@ Areas I would like to explore include:
 - A Vulkan backend and a more API-independent interface
 - Indirect draw/dispatch support
 - Work graphs and GPU queries
-- Explicit resource-state control for cases where automatic tracking is insufficient
+- Finer-grained state control: per-subresource tracking, aliasing barriers, and opting individual resources out of automatic tracking
 - Further improvements to the API and its abstractions
