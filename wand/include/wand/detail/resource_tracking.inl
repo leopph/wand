@@ -1,7 +1,5 @@
 #pragma once
 
-#include <iterator>
-
 
 namespace wand::detail {
 template<typename ResourceStateType>
@@ -17,14 +15,10 @@ auto ResourceStateTracker<ResourceStateType>::Erase(ID3D12Resource* const resour
 }
 
 
-template<typename ResourceStateType>
-auto ResourceStateTracker<ResourceStateType>::Get(
-  ID3D12Resource* const resource) -> ResourceStateType* {
-  if (auto const it{resource_states_.find(resource)}; it != std::end(resource_states_)) {
-    return &it->second;
-  }
-
-  return nullptr;
+template<typename ResourceStateType> template<typename Self>
+auto ResourceStateTracker<ResourceStateType>::Get(this Self& self, ID3D12Resource* resource) -> decltype(auto) {
+  auto const it = self.resource_states_.find(resource);
+  return it != self.resource_states_.end() ? &it->second : nullptr;
 }
 
 
@@ -36,12 +30,12 @@ auto ResourceStateTracker<ResourceStateType>::Clear() -> void {
 
 template<typename ResourceStateType>
 auto ResourceStateTracker<ResourceStateType>::begin() const {
-  return std::begin(resource_states_);
+  return resource_states_.begin();
 }
 
 
 template<typename ResourceStateType>
 auto ResourceStateTracker<ResourceStateType>::end() const {
-  return std::end(resource_states_);
+  return resource_states_.end();
 }
 }

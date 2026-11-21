@@ -19,7 +19,6 @@ using Microsoft::WRL::ComPtr;
 
 namespace wand {
 namespace {
-constexpr auto kSealedLayout = D3D12_BARRIER_LAYOUT_DIRECT_QUEUE_SHADER_RESOURCE;
 constexpr auto kMaxEvenNameLength = 30uz;
 }
 
@@ -32,11 +31,10 @@ auto CommandList::Begin(PipelineState const* pipeline_state) -> void {
     std::array{res_desc_heap_->GetInternalPtr(), sampler_heap_->GetInternalPtr()}.data());
   compute_pipeline_set_ = pipeline_state && pipeline_state->is_compute_;
   SetRootSignature(pipeline_state ? pipeline_state->num_params_ : 0);
-  local_buffer_states_.Clear();
-  local_texture_states_.Clear();
-  required_initial_layouts_.clear();
-  sealed_in_list_.clear();
-  textures_to_seal_.clear();
+  buffer_states_.Clear();
+  texture_states_.Clear();
+  sealed_resources_in_list_.clear();
+  sealed_textures_in_list_.clear();
   buffer_barriers_.clear();
   texture_barriers_.clear();
 
@@ -46,15 +44,9 @@ auto CommandList::Begin(PipelineState const* pipeline_state) -> void {
 }
 
 
+// ReSharper disable once CppMemberFunctionMayBeConst
+// Logically not const
 auto CommandList::End() -> void {
-  for (auto const* const tex : textures_to_seal_) {
-    TrackAccess(*tex, {
-      .scope = {.sync = D3D12_BARRIER_SYNC_NONE, .access = D3D12_BARRIER_ACCESS_NO_ACCESS}, .layout = kSealedLayout
-    });
-  }
-
-  RecordBarriers();
-
   assert(event_depth_ == 0 && "CommandList::End before EndEvent");
   ThrowIfFailed(cmd_list_->Close(), "Failed to close command list.");
 }
@@ -463,13 +455,14 @@ auto CommandList::Resolve(Texture const& dst, Texture const& src, DXGI_FORMAT co
 
 
 auto CommandList::Seal(Buffer const& buf) -> void {
-  sealed_in_list_.emplace_back(&buf);
+  sealed_resources_in_list_.emplace(&buf);
 }
 
 
 auto CommandList::Seal(Texture const& tex) -> void {
-  sealed_in_list_.emplace_back(&tex);
-  textures_to_seal_.emplace_back(&tex);
+  if (sealed_resources_in_list_.emplace(&tex).second) {
+    sealed_textures_in_list_.emplace_back(&tex);
+  }
 }
 
 
@@ -717,7 +710,7 @@ CommandList::CommandList(ComPtr<ID3D12CommandAllocator> allocator, ComPtr<ID3D12
   root_signatures_{root_signatures} {}
 
 
-auto CommandList::TrackAccess(Buffer const& buf, detail::ResourceAccessScope const requested) -> void {
+auto CommandList::TrackAccess(Buffer const& buf, detail::AccessScope const requested) -> void {
   if (buf.IsSealed()) {
     assert(!d3d12::detail::IsWriteAccess(requested.access));
     return;
@@ -730,22 +723,24 @@ auto CommandList::TrackAccess(Buffer const& buf, detail::ResourceAccessScope con
   }
 
   auto const requested_is_write = d3d12::detail::IsWriteAccess(requested.access);
-  auto* const local_state = local_buffer_states_.Get(buf.GetInternalResource());
+  auto* const local_state = buffer_states_.Get(buf.GetInternalResource());
 
   // First use.
   if (!local_state) {
-    local_buffer_states_.Record(buf.GetInternalResource(), {
-      .current = requested,
-      .written = requested_is_write
+    buffer_states_.Record(buf.GetInternalResource(), {
+      .first_scope = requested,
+      .first_scope_closed = false,
+      .latest_scope = requested,
+      .written_in_list = requested_is_write
     });
     return;
   }
 
-  auto const make_barrier = [&](detail::ResourceAccessScope const& after) {
+  auto const make_barrier = [&](detail::AccessScope const& after) {
     return D3D12_BUFFER_BARRIER{
-      .SyncBefore = local_state->current.sync,
+      .SyncBefore = local_state->latest_scope.sync,
       .SyncAfter = after.sync,
-      .AccessBefore = local_state->current.access,
+      .AccessBefore = local_state->latest_scope.access,
       .AccessAfter = after.access,
       .pResource = buf.GetInternalResource(),
       .Offset = 0,
@@ -753,16 +748,19 @@ auto CommandList::TrackAccess(Buffer const& buf, detail::ResourceAccessScope con
     };
   };
 
-  switch (detail::ClassifyTransition(local_state->current, requested, local_state->written)) {
+  switch (detail::ClassifyTransition(local_state->latest_scope, requested, local_state->written_in_list)) {
     case detail::AccessTransition::kPlaceBarrier: {
       buffer_barriers_.emplace_back(make_barrier(requested));
-      local_state->current = requested;
-      local_state->written = local_state->written || requested_is_write;
+      local_state->latest_scope = requested;
+      local_state->first_scope_closed = true;
       break;
     }
 
     case detail::AccessTransition::kMergeWithoutBarrier: {
-      local_state->current = detail::Union(local_state->current, requested);
+      local_state->latest_scope = detail::Union(local_state->latest_scope, requested);
+      if (!local_state->first_scope_closed) {
+        local_state->first_scope = local_state->latest_scope;
+      }
       break;
     }
 
@@ -771,50 +769,55 @@ auto CommandList::TrackAccess(Buffer const& buf, detail::ResourceAccessScope con
     }
 
     case detail::AccessTransition::kExtendLatestBarrier: {
+      assert(local_state->first_scope_closed);
+
       if (auto const [it, end] = std::ranges::find_last(buffer_barriers_, buf.GetInternalResource(),
         &D3D12_BUFFER_BARRIER::pResource); it != end) {
         auto const new_scope = detail::Union({.sync = it->SyncAfter, .access = it->AccessAfter}, requested);
         it->SyncAfter = new_scope.sync;
         it->AccessAfter = new_scope.access;
-        local_state->current = new_scope;
+        local_state->latest_scope = new_scope;
         break;
       }
 
-      auto const new_scope = detail::Union(local_state->current, requested);
+      auto const new_scope = detail::Union(local_state->latest_scope, requested);
       buffer_barriers_.emplace_back(make_barrier(new_scope));
-      local_state->current = new_scope;
+      local_state->latest_scope = new_scope;
       break;
     }
   }
+
+  local_state->written_in_list = local_state->written_in_list || requested_is_write;
 }
 
 
 auto CommandList::TrackAccess(Texture const& tex, detail::TextureAccess const requested) -> void {
   if (tex.IsSealed()) {
-    assert(!d3d12::detail::IsWriteAccess(requested.scope.access) && requested.layout == kSealedLayout);
+    assert(!d3d12::detail::IsWriteAccess(requested.scope.access) && requested.layout == detail::kSealedLayout);
     return;
   }
 
   auto const requested_is_write = d3d12::detail::IsWriteAccess(requested.scope.access);
-  auto const local_state = local_texture_states_.Get(tex.GetInternalResource());
+  auto const local_state = texture_states_.Get(tex.GetInternalResource());
 
   // First use.
   if (!local_state) {
-    required_initial_layouts_.emplace_back(requested.layout, tex.GetInternalResource());
-    local_texture_states_.Record(tex.GetInternalResource(), {
-      .current = requested,
-      .written = requested_is_write
+    texture_states_.Record(tex.GetInternalResource(), {
+      .first_access = requested,
+      .first_access_scope_closed = false,
+      .latest_access = requested,
+      .modified_in_list = requested_is_write
     });
     return;
   }
 
   auto const make_barrier = [&](detail::TextureAccess const after) {
     return D3D12_TEXTURE_BARRIER{
-      .SyncBefore = local_state->current.scope.sync,
+      .SyncBefore = local_state->latest_access.scope.sync,
       .SyncAfter = after.scope.sync,
-      .AccessBefore = local_state->current.scope.access,
+      .AccessBefore = local_state->latest_access.scope.access,
       .AccessAfter = after.scope.access,
-      .LayoutBefore = local_state->current.layout,
+      .LayoutBefore = local_state->latest_access.layout,
       .LayoutAfter = after.layout,
       .pResource = tex.GetInternalResource(),
       .Subresources = {
@@ -825,16 +828,21 @@ auto CommandList::TrackAccess(Texture const& tex, detail::TextureAccess const re
     };
   };
 
-  switch (detail::ClassifyTransition(local_state->current, requested, local_state->written)) {
+  auto const layout_changed = local_state->latest_access.layout != requested.layout;
+
+  switch (detail::ClassifyTransition(local_state->latest_access, requested, local_state->modified_in_list)) {
     case detail::AccessTransition::kPlaceBarrier: {
       texture_barriers_.emplace_back(make_barrier(requested));
-      local_state->current = requested;
-      local_state->written = local_state->written || requested_is_write;
+      local_state->latest_access = requested;
+      local_state->first_access_scope_closed = true;
       break;
     }
 
     case detail::AccessTransition::kMergeWithoutBarrier: {
-      local_state->current.scope = detail::Union(local_state->current.scope, requested.scope);
+      local_state->latest_access.scope = detail::Union(local_state->latest_access.scope, requested.scope);
+      if (!local_state->first_access_scope_closed) {
+        local_state->first_access = local_state->latest_access;
+      }
       break;
     }
 
@@ -843,21 +851,25 @@ auto CommandList::TrackAccess(Texture const& tex, detail::TextureAccess const re
     }
 
     case detail::AccessTransition::kExtendLatestBarrier: {
+      assert(local_state->first_access_scope_closed);
+
       if (auto const [it, end] = std::ranges::find_last(texture_barriers_, tex.GetInternalResource(),
         &D3D12_TEXTURE_BARRIER::pResource); it != end) {
         auto const new_scope = detail::Union({.sync = it->SyncAfter, .access = it->AccessAfter}, requested.scope);
         it->SyncAfter = new_scope.sync;
         it->AccessAfter = new_scope.access;
-        local_state->current.scope = new_scope;
+        local_state->latest_access.scope = new_scope;
         break;
       }
 
-      auto const new_scope = detail::Union(local_state->current.scope, requested.scope);
-      texture_barriers_.emplace_back(make_barrier({.scope = new_scope, .layout = local_state->current.layout}));
-      local_state->current.scope = new_scope;
+      auto const new_scope = detail::Union(local_state->latest_access.scope, requested.scope);
+      texture_barriers_.emplace_back(make_barrier({.scope = new_scope, .layout = local_state->latest_access.layout}));
+      local_state->latest_access.scope = new_scope;
       break;
     }
   }
+
+  local_state->modified_in_list = local_state->modified_in_list || requested_is_write || layout_changed;
 }
 
 

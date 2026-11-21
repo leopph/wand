@@ -101,6 +101,7 @@
       <WarningLevel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">TurnOffAllWarnings</WarningLevel>
       <WarningLevel Condition="'$(Configuration)|$(Platform)'=='Release|x64'">TurnOffAllWarnings</WarningLevel>
     </ClCompile>
+    <ClCompile Include="src\detail\boundary_barrier_builder.cpp" />
     <ClCompile Include="src\detail\resource_tracking.cpp" />
     <ClCompile Include="src\buffer_helpers.cpp" />
     <ClCompile Include="src\buffer_view.cpp" />
@@ -135,6 +136,7 @@
     <ClInclude Include="include\wand\command_list.hpp" />
     <ClInclude Include="include\wand\common.hpp" />
     <ClInclude Include="include\wand\detail\as_utils.hpp" />
+    <ClInclude Include="include\wand\detail\boundary_barrier_builder.hpp" />
     <ClInclude Include="include\wand\detail\buffer_utils.hpp" />
     <ClInclude Include="include\wand\command_list_helpers.hpp" />
     <ClInclude Include="include\wand\flags.hpp" />

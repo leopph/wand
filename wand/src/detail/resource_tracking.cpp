@@ -74,33 +74,41 @@ auto ExpandAggregateScopeBits(D3D12_BARRIER_SYNC const sync) -> D3D12_BARRIER_SY
 }
 
 
-auto Covers(ResourceAccessScope const& scope, ResourceAccessScope const& other) -> bool {
+auto CoversSync(D3D12_BARRIER_SYNC const current, D3D12_BARRIER_SYNC const requested) -> bool {
+  // Aggregate sync bits are treated as though all of their superseded bits are set.
+
+  auto const expanded_current = ExpandAggregateScopeBits(current);
+  auto const expandend_requested = ExpandAggregateScopeBits(requested);
+  return (expanded_current & expandend_requested) == expandend_requested;
+}
+
+
+auto Covers(AccessScope const& scope, AccessScope const& other) -> bool {
   // NO_ACCESS != 0, so it needs special handling.
   // NO_ACCESS is covered by everything.
   // NO_ACCESS covers nothing but NO_ACCESS.
 
-  // Aggregate sync bits are treated as though all of their superseded bits are set.
-
-  auto const expanded_scope_sync = ExpandAggregateScopeBits(scope.sync);
-  auto const expanded_other_sync = ExpandAggregateScopeBits(other.sync);
-
-  auto const sync_covered = (expanded_scope_sync & expanded_other_sync) == expanded_other_sync;
   auto const access_covered = other.access == D3D12_BARRIER_ACCESS_NO_ACCESS
                                 ? true
                                 : scope.access == D3D12_BARRIER_ACCESS_NO_ACCESS
                                     ? false
                                     : (scope.access & other.access) == other.access;
-  return sync_covered && access_covered;
+  return CoversSync(scope.sync, other.sync) && access_covered;
 }
 
 
-auto Union(ResourceAccessScope const& scope1, ResourceAccessScope const& scope2) -> ResourceAccessScope {
+auto IsEmpty(AccessScope const& scope) -> bool {
+  return scope.sync == D3D12_BARRIER_SYNC_NONE && scope.access == D3D12_BARRIER_ACCESS_NO_ACCESS;
+}
+
+
+auto Union(AccessScope const& scope1, AccessScope const& scope2) -> AccessScope {
   // NO_ACCESS cannot be combined with other bits, so it needs special handling.
   // scope1 == NO_ACCESS && scope2 == other -> scope2
   // scope1 == other && scope2 == NO_ACCESS -> scope1
   // scope1 == scope2 == NO_ACCESS -> NO_ACCESS
 
-  return ResourceAccessScope{
+  return AccessScope{
     .sync = scope1.sync | scope2.sync,
     .access = scope1.access == D3D12_BARRIER_ACCESS_NO_ACCESS
                 ? scope2.access
@@ -111,14 +119,25 @@ auto Union(ResourceAccessScope const& scope1, ResourceAccessScope const& scope2)
 }
 
 
-auto ClassifyTransition(ResourceAccessScope const& current, ResourceAccessScope const& requested,
-                        bool const written) -> AccessTransition {
+auto ClassifyTransition(AccessScope const& current, AccessScope const& requested,
+                        bool const has_prior_modification) -> AccessTransition {
+  // Modification is write or layout change. From the perspective of barriers, a layout change is also a write.
+  // The bytes in the memory change.
+
+  // Any use -> no use.
+  if (IsEmpty(requested)) {
+    return AccessTransition::kAlreadyCovered;
+  }
+  // No use -> any use.
+  if (IsEmpty(current)) {
+    return AccessTransition::kMergeWithoutBarrier;
+  }
   // Write->read, read->write, or write->write
   if (d3d12::detail::IsWriteAccess(current.access) || d3d12::detail::IsWriteAccess(requested.access)) {
     return AccessTransition::kPlaceBarrier;
   }
   // Read->read
-  if (!written) {
+  if (!has_prior_modification) {
     return AccessTransition::kMergeWithoutBarrier;
   }
   // Write->read->read where the last barrier already covered the requested usage
@@ -131,8 +150,7 @@ auto ClassifyTransition(ResourceAccessScope const& current, ResourceAccessScope 
 
 
 auto ClassifyTransition(TextureAccess const& current, TextureAccess const& requested,
-                        bool const written) -> AccessTransition {
-  // This is stricter than necessary but safe. There could be layouts that aren't equal but still compatible.
+                        bool const has_prior_modification) -> AccessTransition {
   if (current.layout != requested.layout) {
     return AccessTransition::kPlaceBarrier;
   }
@@ -140,6 +158,6 @@ auto ClassifyTransition(TextureAccess const& current, TextureAccess const& reque
   if (current.scope.access == requested.scope.access && d3d12::detail::IsOutputMergerWrite(requested.scope.access)) {
     return AccessTransition::kMergeWithoutBarrier;
   }
-  return ClassifyTransition(current.scope, requested.scope, written);
+  return ClassifyTransition(current.scope, requested.scope, has_prior_modification);
 }
 }

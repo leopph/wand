@@ -5,6 +5,7 @@
 #include <optional>
 #include <span>
 #include <string_view>
+#include <unordered_set>
 #include <variant>
 
 #include <wand/acceleration_structure.hpp>
@@ -22,11 +23,8 @@
 
 
 namespace wand {
-namespace details {
-struct InitialLayout {
-  D3D12_BARRIER_LAYOUT layout;
-  ID3D12Resource* resource;
-};
+namespace detail {
+class BoundaryBarrierBuilder;
 }
 
 
@@ -243,17 +241,16 @@ private:
               detail::DescriptorHeap const* rtv_heap, detail::DescriptorHeap const* res_desc_heap,
               detail::DescriptorHeap const* sampler_heap, detail::RootSignatureCache* root_signatures);
 
-  auto TrackAccess(Buffer const& buf, detail::ResourceAccessScope requested) -> void;
+  auto TrackAccess(Buffer const& buf, detail::AccessScope requested) -> void;
   auto TrackAccess(Texture const& tex, detail::TextureAccess requested) -> void;
   auto RecordBarriers() -> void;
 
   Microsoft::WRL::ComPtr<ID3D12CommandAllocator> allocator_;
   Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList7> cmd_list_;
-  detail::ResourceStateTracker<detail::PipelineBufferState> local_buffer_states_;
-  detail::ResourceStateTracker<detail::PipelineTextureState> local_texture_states_;
-  std::vector<details::InitialLayout> required_initial_layouts_;
-  std::vector<Resource const*> sealed_in_list_;
-  std::vector<Texture const*> textures_to_seal_;
+  detail::ResourceStateTracker<detail::BufferTrackingState> buffer_states_;
+  detail::ResourceStateTracker<detail::TextureTrackingState> texture_states_;
+  std::unordered_set<Resource const*> sealed_resources_in_list_;
+  std::vector<Texture const*> sealed_textures_in_list_;
   std::vector<D3D12_BUFFER_BARRIER> buffer_barriers_;
   std::vector<D3D12_TEXTURE_BARRIER> texture_barriers_;
   detail::DescriptorHeap const* dsv_heap_;
@@ -269,6 +266,7 @@ private:
 #endif
 
   friend GraphicsDevice;
+  friend detail::BoundaryBarrierBuilder;
 };
 }
 

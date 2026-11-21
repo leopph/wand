@@ -18,6 +18,7 @@
 #include <wand/sampler.hpp>
 #include <wand/swapchain.hpp>
 #include <wand/texture.hpp>
+#include <wand/detail/boundary_barrier_builder.hpp>
 #include <wand/detail/descriptor_heap.hpp>
 #include <wand/detail/resource_tracking.hpp>
 #include <wand/detail/root_signature_cache.hpp>
@@ -87,6 +88,7 @@ public:
   [[nodiscard]] WANDAPI
   auto CreateSampler(D3D12_SAMPLER_DESC const& desc) -> UniqueSamplerHandle;
 
+  // Experimental. May not working correctly.
   WANDAPI
   auto CreateAliasingResources(std::span<BufferDesc const> buffer_descs,
                                std::span<AliasedTextureCreateInfo const> texture_infos, CpuAccess cpu_access,
@@ -139,7 +141,7 @@ public:
   auto SignalFence(Fence& fence) const -> void;
 
   WANDAPI
-  auto ExecuteCommandLists(std::span<CommandList const> cmd_lists) -> void;
+  auto SubmitCommandLists(std::span<CommandList const* const> cmd_lists) -> void;
 
   WANDAPI
   auto WaitIdle() const -> void;
@@ -175,7 +177,7 @@ private:
   auto SignalFenceUnlocked(Fence& fence) const -> UINT64;
 
   [[nodiscard]]
-  auto AcquireLayoutCmdList() -> CommandList&;
+  auto AcquireBoundaryBarrierCmdList() -> CommandList&;
 
   [[nodiscard]]
   auto MakeHeapType(CpuAccess cpu_access) const -> D3D12_HEAP_TYPE;
@@ -208,13 +210,14 @@ private:
   UINT present_flags_{0};
 
   SharedDeviceHandle<Fence> idle_fence_;
-  SharedDeviceHandle<Fence> layout_fence_;
+  SharedDeviceHandle<Fence> boundary_barrier_fence_;
 
   mutable std::mutex queue_submission_mutex_;
-  // Guarded by queue_submission_mutex_. Only used in ExecuteCommandLists.
-  std::vector<details::LayoutCmdListRecord> layout_cmd_lists_;
-  // Guarded by queue_submission_mutex_. Only used in ExecuteCommandLists.
-  std::vector<D3D12_TEXTURE_BARRIER> layout_barrier_storage_;
+  detail::BoundaryBarrierBuilder boundary_barrier_builder_;
+  // Guarded by queue_submission_mutex_. Only used in SubmitCommandLists and Present.
+  std::vector<details::LayoutCmdListRecord> boundary_barrier_cmd_lists_;
+  // Guarded by queue_submission_mutex_. Only used in SubmitCommandLists.
+  std::vector<ID3D12CommandList*> submit_cmd_lists_;
 
   CD3DX12FeatureSupport supported_features_;
 };

@@ -87,6 +87,9 @@
     <ClCompile Include="src\detail\resource_tracking.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="src\detail\boundary_barrier_builder.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\wand\wand.hpp">
@@ -183,6 +186,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\wand\pipeline_parameter.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\wand\detail\boundary_barrier_builder.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

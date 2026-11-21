@@ -14,8 +14,9 @@ public:
 
   auto Erase(ID3D12Resource* resource) -> void;
 
+  template<typename Self>
   [[nodiscard]]
-  auto Get(ID3D12Resource* resource) -> ResourceStateType*;
+  auto Get(this Self& self, ID3D12Resource* resource) -> decltype(auto);
 
   auto Clear() -> void;
 
@@ -30,7 +31,7 @@ private:
 };
 
 
-struct ResourceAccessScope {
+struct AccessScope {
   D3D12_BARRIER_SYNC sync{D3D12_BARRIER_SYNC_NONE};
   D3D12_BARRIER_ACCESS access{D3D12_BARRIER_ACCESS_NO_ACCESS};
 };
@@ -43,27 +44,37 @@ auto GetSupersededScopeBits(D3D12_BARRIER_SYNC sync) -> D3D12_BARRIER_SYNC;
 auto ExpandAggregateScopeBits(D3D12_BARRIER_SYNC sync) -> D3D12_BARRIER_SYNC;
 
 [[nodiscard]]
-auto Covers(ResourceAccessScope const& scope, ResourceAccessScope const& other) -> bool;
+auto CoversSync(D3D12_BARRIER_SYNC current, D3D12_BARRIER_SYNC requested) -> bool;
 
 [[nodiscard]]
-auto Union(ResourceAccessScope const& scope1, ResourceAccessScope const& scope2) -> ResourceAccessScope;
+auto Covers(AccessScope const& scope, AccessScope const& other) -> bool;
+
+[[nodiscard]]
+auto IsEmpty(AccessScope const& scope) -> bool;
+
+[[nodiscard]]
+auto Union(AccessScope const& scope1, AccessScope const& scope2) -> AccessScope;
 
 
 struct TextureAccess {
-  ResourceAccessScope scope;
+  AccessScope scope;
   D3D12_BARRIER_LAYOUT layout;
 };
 
 
-struct PipelineBufferState {
-  ResourceAccessScope current;
-  bool written;
+struct BufferTrackingState {
+  AccessScope first_scope;
+  bool first_scope_closed;
+  AccessScope latest_scope;
+  bool written_in_list;
 };
 
 
-struct PipelineTextureState {
-  TextureAccess current;
-  bool written;
+struct TextureTrackingState {
+  TextureAccess first_access;
+  bool first_access_scope_closed;
+  TextureAccess latest_access;
+  bool modified_in_list;
 };
 
 
@@ -89,11 +100,15 @@ enum class AccessTransition : std::uint8_t {
 
 
 [[nodiscard]]
-auto ClassifyTransition(ResourceAccessScope const& current, ResourceAccessScope const& requested,
-                        bool written) -> AccessTransition;
+auto ClassifyTransition(AccessScope const& current, AccessScope const& requested,
+                        bool has_prior_modification) -> AccessTransition;
 
 [[nodiscard]]
-auto ClassifyTransition(TextureAccess const& current, TextureAccess const& requested, bool written) -> AccessTransition;
+auto ClassifyTransition(TextureAccess const& current, TextureAccess const& requested,
+                        bool has_prior_modification) -> AccessTransition;
+
+
+constexpr auto kSealedLayout = D3D12_BARRIER_LAYOUT_DIRECT_QUEUE_SHADER_RESOURCE;
 }
 
 

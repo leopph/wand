@@ -3,13 +3,10 @@
 #include <algorithm>
 #include <array>
 #include <bit>
-#include <cassert>
-#include <cmath>
 #include <format>
-#include <iterator>
 #include <limits>
+#include <ranges>
 #include <stdexcept>
-#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -17,7 +14,6 @@
 
 #include "wand/flags.hpp"
 #include "wand/format.hpp"
-#include "wand/util.hpp"
 #include "wand/detail/as_utils.hpp"
 #include "wand/detail/buffer_utils.hpp"
 #include "wand/platforms/detail/d3d12_internals.hpp"
@@ -220,7 +216,7 @@ GraphicsDevice::GraphicsDevice(bool const enable_debug, bool const use_sw_render
   }
 
   idle_fence_ = CreateFence(0);
-  layout_fence_ = CreateFence(0);
+  boundary_barrier_fence_ = CreateFence(0);
 }
 
 
@@ -736,64 +732,93 @@ auto GraphicsDevice::SignalFence(Fence& fence) const -> void {
 }
 
 
-auto GraphicsDevice::ExecuteCommandLists(std::span<CommandList const> const cmd_lists) -> void {
-  std::scoped_lock const queue_lck{queue_submission_mutex_};
-
-  // For the time being, Wand cannot synchronize arbitrary command lists in a single scope.
-  // So we are submitting each command list in its own scope.
-  // This is correct, just potentially slower.
-  for (auto const& cmd_list : cmd_lists) {
-    layout_barrier_storage_.clear();
-
-    {
-      std::scoped_lock const tracker_lck{state_tracker_mutex_};
-
-      // We satisfy the required initial layouts of the command list.
-      // A layout barrier is a barrier that transitions the resource from its
-      // last known state - tracked globally - to the first state used in the command list.
-      // It is a bridge between command lists and execution scopes.
-      for (auto const& initial_layout : cmd_list.required_initial_layouts_) {
-        auto const global_state{global_resource_states_.Get(initial_layout.resource)};
-        auto layout_before{global_state ? global_state->layout : D3D12_BARRIER_LAYOUT_UNDEFINED};
-
-        layout_barrier_storage_.emplace_back(D3D12_BARRIER_SYNC_NONE, D3D12_BARRIER_SYNC_NONE,
-          D3D12_BARRIER_ACCESS_NO_ACCESS, D3D12_BARRIER_ACCESS_NO_ACCESS,
-          layout_before, initial_layout.layout, initial_layout.resource,
-          D3D12_BARRIER_SUBRESOURCE_RANGE{
-            .IndexOrFirstMipLevel = 0xffffffff, .NumMipLevels = 0, .FirstArraySlice = 0,
-            .NumArraySlices = 0,
-            .FirstPlane = 0, .NumPlanes = 0
-          }, D3D12_TEXTURE_BARRIER_FLAG_NONE);
-      }
-
-      // We record the final states of each resource used in the command list to the global state tracker
-      for (auto const& [res, state] : cmd_list.local_texture_states_) {
-        global_resource_states_.Record(res, {.layout = state.current.layout});
-      }
-
-      for (auto const* const res : cmd_list.sealed_in_list_) {
-        res->sealed_.store(true, std::memory_order_release);
-      }
-    }
-
-    if (!layout_barrier_storage_.empty()) {
-      D3D12_BARRIER_GROUP const layout_barrier_group{
-        .Type = D3D12_BARRIER_TYPE_TEXTURE, .NumBarriers = ClampCast<UINT32>(layout_barrier_storage_.size()),
-        .pTextureBarriers = layout_barrier_storage_.data()
-      };
-
-      auto& layout_cmd{AcquireLayoutCmdList()};
-
-      layout_cmd.Begin(nullptr);
-      layout_cmd.cmd_list_->Barrier(1, &layout_barrier_group);
-      layout_cmd.End();
-      queue_->ExecuteCommandLists(1,
-        std::array{static_cast<ID3D12CommandList*>(layout_cmd.cmd_list_.Get())}.data());
-      SignalFenceUnlocked(*layout_fence_);
-    }
-
-    queue_->ExecuteCommandLists(1, CommandListCast(cmd_list.cmd_list_.GetAddressOf()));
+auto GraphicsDevice::SubmitCommandLists(std::span<CommandList const* const> const cmd_lists) -> void {
+  if (cmd_lists.empty()) {
+    return;
   }
+
+  if (std::ranges::any_of(cmd_lists, [](CommandList const* const cmd) { return !cmd; })) {
+    throw std::runtime_error{"Failed to submit command lists: command list was null."};
+  }
+
+  auto const submit_lck = std::scoped_lock{queue_submission_mutex_};
+  submit_cmd_lists_.clear();
+
+  {
+    auto const tracker_lck = std::scoped_lock{state_tracker_mutex_};
+    boundary_barrier_builder_.Build(cmd_lists, global_resource_states_);
+
+    // Record the final layout of each texture used in the command list into the global state tracker
+    for (auto const* const cmd : cmd_lists) {
+      for (auto const& [res, state] : cmd->texture_states_) {
+        global_resource_states_.Record(res, {.layout = state.latest_access.layout});
+      }
+    }
+
+    // Record the layout for each texture sealed in the command list
+    for (auto const& barrier : boundary_barrier_builder_.GetTextureSealBarriers()) {
+      global_resource_states_.Record(barrier.pResource, {.layout = detail::kSealedLayout});
+    }
+  }
+
+  for (auto const [idx, cmd] : std::views::enumerate(cmd_lists)) {
+    // Seal all resources that the command list marked as such
+    for (auto const* const res : cmd->sealed_resources_in_list_) {
+      res->sealed_.store(true, std::memory_order_release);
+    }
+
+    // If the command list has preceding barriers, record them in a command list and place that list in just before
+    // the command list.
+
+    auto const barriers = boundary_barrier_builder_.GetBoundaryBarriersForCommandList(idx);
+
+    auto groups = std::array<D3D12_BARRIER_GROUP, 2>{};
+    auto group_count = UINT32{0};
+
+    if (!barriers.buffer.empty()) {
+      auto& group = groups[group_count++];
+      group.Type = D3D12_BARRIER_TYPE_BUFFER;
+      group.NumBarriers = static_cast<UINT32>(barriers.buffer.size());
+      group.pBufferBarriers = barriers.buffer.data();
+    }
+
+    if (!barriers.texture.empty()) {
+      auto& group = groups[group_count++];
+      group.Type = D3D12_BARRIER_TYPE_TEXTURE;
+      group.NumBarriers = static_cast<UINT32>(barriers.texture.size());
+      group.pTextureBarriers = barriers.texture.data();
+    }
+
+    if (group_count > 0) {
+      auto& barrier_cmd = AcquireBoundaryBarrierCmdList();
+      barrier_cmd.Begin(nullptr);
+      barrier_cmd.cmd_list_->Barrier(group_count, groups.data());
+      barrier_cmd.End();
+      submit_cmd_lists_.emplace_back(barrier_cmd.cmd_list_.Get());
+    }
+
+    // Add the command list to the submission
+    submit_cmd_lists_.emplace_back(cmd->cmd_list_.Get());
+  }
+
+  // Add barriers for sealed resources in a new command list at the end of the submission.
+  if (auto const seal_barriers = boundary_barrier_builder_.GetTextureSealBarriers(); !seal_barriers.empty()) {
+    auto const group = D3D12_BARRIER_GROUP{
+      .Type = D3D12_BARRIER_TYPE_TEXTURE,
+      .NumBarriers = static_cast<UINT32>(seal_barriers.size()),
+      .pTextureBarriers = seal_barriers.data()
+    };
+
+    auto& barrier_cmd = AcquireBoundaryBarrierCmdList();
+    barrier_cmd.Begin(nullptr);
+    barrier_cmd.cmd_list_->Barrier(1, &group);
+    barrier_cmd.End();
+    submit_cmd_lists_.emplace_back(barrier_cmd.cmd_list_.Get());
+  }
+
+  // Submit
+  queue_->ExecuteCommandLists(static_cast<UINT>(submit_cmd_lists_.size()), submit_cmd_lists_.data());
+  SignalFenceUnlocked(*boundary_barrier_fence_);
 }
 
 
@@ -826,39 +851,37 @@ auto GraphicsDevice::ResizeSwapChain(SwapChain& swap_chain, UINT const width, UI
 
 
 auto GraphicsDevice::Present(SwapChain const& swap_chain) -> void {
-  std::scoped_lock const queue_lck{queue_submission_mutex_};
-  std::scoped_lock const state_tracker_lck{state_tracker_mutex_};
+  auto const lck = std::scoped_lock{queue_submission_mutex_, state_tracker_mutex_};
 
-  auto const cur_tex{swap_chain.GetCurrentTexture().resource_.Get()};
-  auto const state{global_resource_states_.Get(cur_tex)};
-  auto const layout_before{state ? state->layout : D3D12_BARRIER_LAYOUT_UNDEFINED};
+  auto const cur_tex = swap_chain.GetCurrentTexture().resource_.Get();
+  auto const state = global_resource_states_.Get(cur_tex);
+  auto const layout_before = state ? state->layout : D3D12_BARRIER_LAYOUT_UNDEFINED;
 
   if (!state || state->layout != D3D12_BARRIER_LAYOUT_PRESENT) {
     global_resource_states_.Record(cur_tex, {.layout = D3D12_BARRIER_LAYOUT_PRESENT});
 
-    D3D12_TEXTURE_BARRIER const barrier{
-      D3D12_BARRIER_SYNC_NONE, D3D12_BARRIER_SYNC_NONE,
-      D3D12_BARRIER_ACCESS_NO_ACCESS, D3D12_BARRIER_ACCESS_NO_ACCESS,
-      layout_before, D3D12_BARRIER_LAYOUT_PRESENT,
-      swap_chain.GetCurrentTexture().resource_.Get(),
-      {
+    auto const barrier = D3D12_TEXTURE_BARRIER{
+      .SyncBefore = D3D12_BARRIER_SYNC_NONE, .SyncAfter = D3D12_BARRIER_SYNC_NONE,
+      .AccessBefore = D3D12_BARRIER_ACCESS_NO_ACCESS, .AccessAfter = D3D12_BARRIER_ACCESS_NO_ACCESS,
+      .LayoutBefore = layout_before, .LayoutAfter = D3D12_BARRIER_LAYOUT_PRESENT,
+      .pResource = swap_chain.GetCurrentTexture().resource_.Get(), .Subresources = {
         .IndexOrFirstMipLevel = 0xffffffff, .NumMipLevels = 0, .FirstArraySlice = 0, .NumArraySlices = 0,
         .FirstPlane = 0, .NumPlanes = 0
       },
-      D3D12_TEXTURE_BARRIER_FLAG_NONE
+      .Flags = D3D12_TEXTURE_BARRIER_FLAG_NONE
     };
 
-    D3D12_BARRIER_GROUP const barrier_group{
+    auto const barrier_group = D3D12_BARRIER_GROUP{
       .Type = D3D12_BARRIER_TYPE_TEXTURE, .NumBarriers = 1, .pTextureBarriers = &barrier
     };
 
-    auto& cmd_list{AcquireLayoutCmdList()};
+    auto& cmd_list = AcquireBoundaryBarrierCmdList();
     cmd_list.Begin(nullptr);
     cmd_list.cmd_list_->Barrier(1, &barrier_group);
     cmd_list.End();
 
     queue_->ExecuteCommandLists(1, std::array{static_cast<ID3D12CommandList*>(cmd_list.cmd_list_.Get())}.data());
-    SignalFenceUnlocked(*layout_fence_);
+    SignalFenceUnlocked(*boundary_barrier_fence_);
   }
 
   ThrowIfFailed(swap_chain.swap_chain_->Present(swap_chain.GetSyncInterval(), present_flags_),
@@ -1348,18 +1371,18 @@ auto GraphicsDevice::SignalFenceUnlocked(Fence& fence) const -> UINT64 {
 }
 
 
-auto GraphicsDevice::AcquireLayoutCmdList() -> CommandList& {
-  auto const completed_fence_val{layout_fence_->GetCompletedValue()};
-  auto const next_fence_val{layout_fence_->GetNextValue()};
+auto GraphicsDevice::AcquireBoundaryBarrierCmdList() -> CommandList& {
+  auto const completed_fence_val = boundary_barrier_fence_->GetCompletedValue();
+  auto const next_fence_val = boundary_barrier_fence_->GetNextValue();
 
-  for (std::size_t i{0}; i < layout_cmd_lists_.size(); i++) {
-    if (layout_cmd_lists_[i].fence_completion_val <= completed_fence_val) {
-      layout_cmd_lists_[i].fence_completion_val = next_fence_val;
-      return *layout_cmd_lists_[i].cmd_list;
+  for (auto& record : boundary_barrier_cmd_lists_) {
+    if (record.fence_completion_val <= completed_fence_val) {
+      record.fence_completion_val = next_fence_val;
+      return *record.cmd_list;
     }
   }
 
-  return *layout_cmd_lists_.emplace_back(CreateCommandList(), next_fence_val).cmd_list;
+  return *boundary_barrier_cmd_lists_.emplace_back(CreateCommandList(), next_fence_val).cmd_list;
 }
 
 
