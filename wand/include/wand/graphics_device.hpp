@@ -13,6 +13,7 @@
 #include <wand/command_list.hpp>
 #include <wand/device_object.hpp>
 #include <wand/fence.hpp>
+#include <wand/graphics_device_capabilities.hpp>
 #include <wand/pipeline.hpp>
 #include <wand/rt_state_object.hpp>
 #include <wand/sampler.hpp>
@@ -58,6 +59,9 @@ public:
 
   auto operator=(GraphicsDevice const&) -> void = delete;
   auto operator=(GraphicsDevice&&) -> void = delete;
+
+  [[nodiscard]] WANDAPI
+  auto GetCapabilities() const -> GraphicsDeviceCapabilities const&;
 
   [[nodiscard]] WANDAPI
   auto CreateBuffer(BufferDesc const& desc,
@@ -220,5 +224,6 @@ private:
   std::vector<ID3D12CommandList*> submit_cmd_lists_;
 
   CD3DX12FeatureSupport supported_features_;
+  GraphicsDeviceCapabilities capabilities_{};
 };
 }

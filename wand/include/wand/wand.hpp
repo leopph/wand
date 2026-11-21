@@ -9,6 +9,7 @@
 #include <wand/flags.hpp>
 #include <wand/format.hpp>
 #include <wand/graphics_device.hpp>
+#include <wand/graphics_device_capabilities.hpp>
 #include <wand/pipeline.hpp>
 #include <wand/pipeline_parameter.hpp>
 #include <wand/rt_state_object.hpp>

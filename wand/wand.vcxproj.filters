@@ -131,6 +131,9 @@
     <ClInclude Include="include\wand\command_list.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="include\wand\graphics_device_capabilities.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="include\wand\pipeline.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>

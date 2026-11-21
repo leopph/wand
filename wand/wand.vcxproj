@@ -136,6 +136,7 @@
     <ClInclude Include="include\wand\command_list.hpp" />
     <ClInclude Include="include\wand\common.hpp" />
     <ClInclude Include="include\wand\detail\as_utils.hpp" />
+    <ClInclude Include="include\wand\graphics_device_capabilities.hpp" />
     <ClInclude Include="include\wand\detail\boundary_barrier_builder.hpp" />
     <ClInclude Include="include\wand\detail\buffer_utils.hpp" />
     <ClInclude Include="include\wand\command_list_helpers.hpp" />
@@ -167,6 +168,7 @@
     <None Include="include\wand\command_list.inl" />
     <None Include="include\wand\flags.inl" />
     <None Include="include\wand\detail\resource_tracking.inl" />
+    <None Include="include\wand\graphics_device_capabilities.inl" />
     <None Include="include\wand\pipeline_parameter.inl" />
     <None Include="include\wand\util.inl" />
     <None Include="packages.config" />

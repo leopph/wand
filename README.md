@@ -73,7 +73,7 @@ float4 SampleTexture(float2 uv) {
 
 ### Requirements
 
-- Windows with a Direct3D 12 capable GPU and driver
+- Windows with a Direct3D 12 GPU and driver supporting Shader Model 6.6, Resource Binding Tier 3, and enhanced barriers
 - Visual Studio C++23 capable MSVC platform toolset
 - Windows SDK and DirectX Agility SDK support
 - NuGet

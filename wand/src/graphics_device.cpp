@@ -156,19 +156,14 @@ GraphicsDevice::GraphicsDevice(bool const enable_debug, bool const use_sw_render
     throw std::runtime_error{"Enhanced barriers is required but not supported."};
   }
 
-  if (supported_features_.HighestRootSignatureVersion() < D3D_ROOT_SIGNATURE_VERSION_1_1) {
-    throw std::runtime_error{"Root Signature 1.1 is required but no supported."};
-  }
-
-  if (!supported_features_.VPAndRTArrayIndexFromAnyShaderFeedingRasterizerSupportedWithoutGSEmulation()) {
-    throw std::runtime_error{
-      "Viewport and render target array index outside of geometry shaders is required but no supported."
-    };
-  }
-
-  if (supported_features_.MeshShaderTier() < D3D12_MESH_SHADER_TIER_1) {
-    throw std::runtime_error{"Mesh Shader Tier 1 is required but not supported."};
-  }
+  capabilities_ = GraphicsDeviceCapabilities{
+    .highest_shader_model = supported_features_.HighestShaderModel(),
+    .mesh_shader_tier = supported_features_.MeshShaderTier(),
+    .raytracing_tier = supported_features_.RaytracingTier(),
+    .gpu_upload_heap = static_cast<bool>(supported_features_.GPUUploadHeapSupported()),
+    .vp_and_rt_array_index_from_any_shader = static_cast<bool>(
+      supported_features_.VPAndRTArrayIndexFromAnyShaderFeedingRasterizerSupportedWithoutGSEmulation())
+  };
 
   D3D12MA::ALLOCATOR_DESC const allocator_desc{D3D12MA::ALLOCATOR_FLAG_NONE, device_.Get(), 0, nullptr, adapter.Get()};
   ThrowIfFailed(CreateAllocator(&allocator_desc, &allocator_), "Failed to create D3D12 memory allocator.");
@@ -220,8 +215,19 @@ GraphicsDevice::GraphicsDevice(bool const enable_debug, bool const use_sw_render
 }
 
 
+auto GraphicsDevice::GetCapabilities() const -> GraphicsDeviceCapabilities const& {
+  return capabilities_;
+}
+
+
 auto GraphicsDevice::CreateBuffer(BufferDesc const& desc,
                                   CpuAccess const cpu_access) -> SharedDeviceHandle<Buffer> {
+  if (HasAny(desc.usage, BufferUsage::kAccelerationStructure) && !capabilities_.SupportsRaytracing()) {
+    throw std::runtime_error{
+      "Cannot create a buffer with acceleration structure usage because raytracing is not supported."
+    };
+  }
+
   // If the buffer needs to have both CPU and GPU write capabilities, it must be placed in a GPU upload heap.
   // If GPU upload heaps are not supported, we cannot create such a buffer.
   if (cpu_access == CpuAccess::kWrite && detail::IsGpuWritable(desc) && !supported_features_.GPUUploadHeapSupported()) {
@@ -291,6 +297,10 @@ auto GraphicsDevice::CreateTexture(TextureDesc const& desc,
 auto GraphicsDevice::CreatePipelineState(PipelineDesc const& desc,
                                          std::uint8_t const num_32_bit_params) -> SharedDeviceHandle<
   PipelineState> {
+  if ((desc.as.BytecodeLength != 0 || desc.ms.BytecodeLength != 0) && !capabilities_.SupportsMeshShaders()) {
+    throw std::runtime_error{"Cannot create a mesh shader pipeline because mesh shaders are not supported."};
+  }
+
   auto root_signature = GetOrCreateRootSignature(num_32_bit_params);
 
   ComPtr<ID3D12PipelineState> pipeline_state;
@@ -335,6 +345,10 @@ auto GraphicsDevice::CreatePipelineState(PipelineDesc const& desc,
 auto GraphicsDevice::CreateRtStateObject(RtStateObjectDesc& desc,
                                          std::uint8_t const num_32_bit_params) -> SharedDeviceHandle<
   RtStateObject> {
+  if (!capabilities_.SupportsRaytracing()) {
+    throw std::runtime_error{"Cannot create a raytracing state object because raytracing is not supported."};
+  }
+
   auto root_signature = GetOrCreateRootSignature(num_32_bit_params);
   auto* const global_root_sig_desc = desc.desc_.CreateSubobject<CD3DX12_GLOBAL_ROOT_SIGNATURE_SUBOBJECT>();
   global_root_sig_desc->SetRootSignature(root_signature.Get());
@@ -571,6 +585,10 @@ auto GraphicsDevice::CreateBufferView(BufferViewDesc const& desc,
 auto GraphicsDevice::CreateAccelerationStructure(AccelerationStructureDesc const& desc,
                                                  SharedDeviceHandle<Buffer> const& buf)
   -> SharedDeviceHandle<AccelerationStructure> {
+  if (!capabilities_.SupportsRaytracing()) {
+    throw std::runtime_error{"Cannot create an acceleration structure because raytracing is not supported."};
+  }
+
   if (!buf) {
     throw std::runtime_error{"Failed to create acceleration structure: buffer was null."};
   }
@@ -902,6 +920,12 @@ auto GraphicsDevice::GetCopyableFootprints(TextureDesc const& desc, UINT const f
 auto GraphicsDevice::GetAccelerationStructurePrebuildInfo(
   BuildAccelerationStructureInputs const& inputs
 ) const -> D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO {
+  if (!capabilities_.SupportsRaytracing()) {
+    throw std::runtime_error{
+      "Cannot get acceleration structure prebuild info because raytracing is not supported."
+    };
+  }
+
   auto geometry_storage = std::vector<D3D12_RAYTRACING_GEOMETRY_DESC>{};
   auto const d3d_inputs = detail::ToD3D12(inputs, geometry_storage);
 
