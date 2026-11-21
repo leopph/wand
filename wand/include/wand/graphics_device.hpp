@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <expected>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -49,16 +50,34 @@ struct LayoutCmdListRecord {
 }
 
 
+enum class DeviceDebugLevel : std::uint8_t {
+  // Disables all debug validation
+  kNone,
+  // Enables API-level debug validation
+  kApi,
+  // Enables GPU-level debug validation
+  kGpu
+};
+
+
+enum class DeviceType : std::uint8_t {
+  kHardware,
+  kSoftware
+};
+
+
+enum class DeviceError : std::uint8_t {
+  kNoResourceBindingTier3,
+  kNoShaderModel66,
+  kNoEnhancedBarriers,
+};
+
+
 class GraphicsDevice {
 public:
-  explicit WANDAPI GraphicsDevice(bool enable_debug, bool use_sw_rendering);
-  GraphicsDevice(GraphicsDevice const&) = delete;
-  GraphicsDevice(GraphicsDevice&&) = delete;
-
-  WANDAPI ~GraphicsDevice() = default;
-
-  auto operator=(GraphicsDevice const&) -> void = delete;
-  auto operator=(GraphicsDevice&&) -> void = delete;
+  [[nodiscard]] WANDAPI static
+  auto Create(DeviceDebugLevel debug_level,
+              DeviceType type) -> std::expected<std::unique_ptr<GraphicsDevice>, DeviceError>;
 
   [[nodiscard]] WANDAPI
   auto GetCapabilities() const -> GraphicsDeviceCapabilities const&;
@@ -166,7 +185,19 @@ public:
     BuildAccelerationStructureInputs const& inputs
   ) const -> D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO;
 
+  GraphicsDevice(GraphicsDevice const&) = delete;
+  GraphicsDevice(GraphicsDevice&&) = delete;
+
+  WANDAPI
+  ~GraphicsDevice() = default;
+
+  auto operator=(GraphicsDevice const&) -> void = delete;
+  auto operator=(GraphicsDevice&&) -> void = delete;
+
 private:
+  GraphicsDevice(Microsoft::WRL::ComPtr<IDXGIFactory7> factory, Microsoft::WRL::ComPtr<IDXGIAdapter4> const& adapter,
+                 Microsoft::WRL::ComPtr<ID3D12Device10> device, CD3DX12FeatureSupport const& supported_features);
+
   auto SwapChainCreateTextures(SwapChain& swap_chain) -> void;
 
   auto CreateAsDescriptor(D3D12_GPU_VIRTUAL_ADDRESS gpu_address) -> UINT;

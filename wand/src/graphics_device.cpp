@@ -98,11 +98,18 @@ auto AsD3d12Desc(TextureDesc const& desc) -> D3D12_RESOURCE_DESC1 {
 }
 
 
-GraphicsDevice::GraphicsDevice(bool const enable_debug, bool const use_sw_rendering) {
+auto GraphicsDevice::Create(DeviceDebugLevel const debug_level,
+                            DeviceType const type) -> std::expected<std::unique_ptr<GraphicsDevice>, DeviceError> {
+  auto const enable_debug = debug_level != DeviceDebugLevel::kNone;
+
   if (enable_debug) {
     ComPtr<ID3D12Debug6> debug;
     ThrowIfFailed(D3D12GetDebugInterface(IID_PPV_ARGS(&debug)), "Failed to get D3D12 debug interface.");
     debug->EnableDebugLayer();
+
+    if (debug_level == DeviceDebugLevel::kGpu) {
+      debug->SetEnableGPUBasedValidation(TRUE);
+    }
 
     ComPtr<IDXGIInfoQueue> dxgi_info_queue;
     ThrowIfFailed(DXGIGetDebugInterface1(0, IID_PPV_ARGS(&dxgi_info_queue)), "Failed to get DXGI debug interface.");
@@ -119,99 +126,49 @@ GraphicsDevice::GraphicsDevice(bool const enable_debug, bool const use_sw_render
     factory_create_flags |= DXGI_CREATE_FACTORY_DEBUG;
   }
 
-  ThrowIfFailed(CreateDXGIFactory2(factory_create_flags, IID_PPV_ARGS(&factory_)), "Failed to create DXGI factory.");
+  ComPtr<IDXGIFactory7> factory;
+  ThrowIfFailed(CreateDXGIFactory2(factory_create_flags, IID_PPV_ARGS(&factory)), "Failed to create DXGI factory.");
 
   ComPtr<IDXGIAdapter4> adapter;
 
-  if (use_sw_rendering) {
-    ThrowIfFailed(factory_->EnumWarpAdapter(IID_PPV_ARGS(&adapter)), "Failed to get WARP adapter.");
+  if (type == DeviceType::kSoftware) {
+    ThrowIfFailed(factory->EnumWarpAdapter(IID_PPV_ARGS(&adapter)), "Failed to get WARP adapter.");
   } else {
-    ThrowIfFailed(factory_->EnumAdapterByGpuPreference(0, DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE, IID_PPV_ARGS(&adapter)),
+    ThrowIfFailed(factory->EnumAdapterByGpuPreference(0, DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE, IID_PPV_ARGS(&adapter)),
       "Failed to get high performance adapter.");
   }
 
-  ThrowIfFailed(D3D12CreateDevice(adapter.Get(), D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&device_)),
+  ComPtr<ID3D12Device10> device;
+  ThrowIfFailed(D3D12CreateDevice(adapter.Get(), D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&device)),
     "Failed to create D3D12 device.");
 
   if (enable_debug) {
     ComPtr<ID3D12InfoQueue> d3d12_info_queue;
-    ThrowIfFailed(device_.As(&d3d12_info_queue), "Failed to get D3D12 info queue.");
+    ThrowIfFailed(device.As(&d3d12_info_queue), "Failed to get D3D12 info queue.");
     ThrowIfFailed(d3d12_info_queue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_ERROR, TRUE),
       "Failed to set debug break on D3D12 error.");
     ThrowIfFailed(d3d12_info_queue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_CORRUPTION, TRUE),
       "Failed to set debug break on D3D12 corruption.");
   }
 
-  ThrowIfFailed(supported_features_.Init(device_.Get()), "Failed to query D3D12 features.");
+  CD3DX12FeatureSupport supported_features;
+  ThrowIfFailed(supported_features.Init(device.Get()), "Failed to query D3D12 features.");
 
-  if (supported_features_.ResourceBindingTier() < D3D12_RESOURCE_BINDING_TIER_3) {
-    throw std::runtime_error{"Resource Bindig Tier 3 is required but not supported."};
+  if (supported_features.ResourceBindingTier() < D3D12_RESOURCE_BINDING_TIER_3) {
+    return std::unexpected{DeviceError::kNoResourceBindingTier3};
   }
 
-  if (supported_features_.HighestShaderModel() < D3D_SHADER_MODEL_6_6) {
-    throw std::runtime_error{"Shader Model 6.6 is required but not supported."};
+  if (supported_features.HighestShaderModel() < D3D_SHADER_MODEL_6_6) {
+    return std::unexpected{DeviceError::kNoShaderModel66};
   }
 
-  if (!supported_features_.EnhancedBarriersSupported()) {
-    throw std::runtime_error{"Enhanced barriers is required but not supported."};
+  if (!supported_features.EnhancedBarriersSupported()) {
+    return std::unexpected{DeviceError::kNoEnhancedBarriers};
   }
 
-  capabilities_ = GraphicsDeviceCapabilities{
-    .highest_shader_model = supported_features_.HighestShaderModel(),
-    .mesh_shader_tier = supported_features_.MeshShaderTier(),
-    .raytracing_tier = supported_features_.RaytracingTier(),
-    .gpu_upload_heap = static_cast<bool>(supported_features_.GPUUploadHeapSupported()),
-    .vp_and_rt_array_index_from_any_shader = static_cast<bool>(
-      supported_features_.VPAndRTArrayIndexFromAnyShaderFeedingRasterizerSupportedWithoutGSEmulation())
+  return std::unique_ptr<GraphicsDevice>{
+    new GraphicsDevice{std::move(factory), adapter, std::move(device), supported_features}
   };
-
-  D3D12MA::ALLOCATOR_DESC const allocator_desc{D3D12MA::ALLOCATOR_FLAG_NONE, device_.Get(), 0, nullptr, adapter.Get()};
-  ThrowIfFailed(CreateAllocator(&allocator_desc, &allocator_), "Failed to create D3D12 memory allocator.");
-
-  D3D12_DESCRIPTOR_HEAP_DESC constexpr rtv_heap_desc{
-    D3D12_DESCRIPTOR_HEAP_TYPE_RTV, rtv_heap_size_, D3D12_DESCRIPTOR_HEAP_FLAG_NONE, 0
-  };
-  ComPtr<ID3D12DescriptorHeap> rtv_heap;
-  ThrowIfFailed(device_->CreateDescriptorHeap(&rtv_heap_desc, IID_PPV_ARGS(&rtv_heap)), "Failed to create RTV heap.");
-  rtv_heap_ = std::make_unique<detail::DescriptorHeap>(std::move(rtv_heap), *device_.Get());
-
-  D3D12_DESCRIPTOR_HEAP_DESC constexpr dsv_heap_desc{
-    D3D12_DESCRIPTOR_HEAP_TYPE_DSV, dsv_heap_size_, D3D12_DESCRIPTOR_HEAP_FLAG_NONE, 0
-  };
-  ComPtr<ID3D12DescriptorHeap> dsv_heap;
-  ThrowIfFailed(device_->CreateDescriptorHeap(&dsv_heap_desc, IID_PPV_ARGS(&dsv_heap)), "Failed to create DSV heap.");
-  dsv_heap_ = std::make_unique<detail::DescriptorHeap>(std::move(dsv_heap), *device_.Get());
-
-  D3D12_DESCRIPTOR_HEAP_DESC constexpr res_desc_heap_desc{
-    D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, res_desc_heap_size_, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE, 0
-  };
-  ComPtr<ID3D12DescriptorHeap> res_desc_heap;
-  ThrowIfFailed(device_->CreateDescriptorHeap(&res_desc_heap_desc, IID_PPV_ARGS(&res_desc_heap)),
-    "Failed to create resource descriptor heap.");
-  res_desc_heap_ = std::make_unique<detail::DescriptorHeap>(std::move(res_desc_heap), *device_.Get());
-
-  D3D12_DESCRIPTOR_HEAP_DESC constexpr sampler_heap_desc{
-    D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER, sampler_heap_size_, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE, 0
-  };
-  ComPtr<ID3D12DescriptorHeap> sampler_heap;
-  ThrowIfFailed(device_->CreateDescriptorHeap(&sampler_heap_desc, IID_PPV_ARGS(&sampler_heap)),
-    "Failed to create sampler heap.");
-  sampler_heap_ = std::make_unique<detail::DescriptorHeap>(std::move(sampler_heap), *device_.Get());
-
-  D3D12_COMMAND_QUEUE_DESC constexpr queue_desc{
-    D3D12_COMMAND_LIST_TYPE_DIRECT, D3D12_COMMAND_QUEUE_PRIORITY_NORMAL, D3D12_COMMAND_QUEUE_FLAG_NONE, 0
-  };
-  ThrowIfFailed(device_->CreateCommandQueue(&queue_desc, IID_PPV_ARGS(&queue_)), "Failed to create command queue.");
-
-  if (BOOL allow_tearing; SUCCEEDED(
-    factory_->CheckFeatureSupport(DXGI_FEATURE_PRESENT_ALLOW_TEARING, &allow_tearing, sizeof(allow_tearing)
-    )) && allow_tearing) {
-    swap_chain_flags_ |= DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
-    present_flags_ |= DXGI_PRESENT_ALLOW_TEARING;
-  }
-
-  idle_fence_ = CreateFence(0);
-  boundary_barrier_fence_ = CreateFence(0);
 }
 
 
@@ -932,6 +889,70 @@ auto GraphicsDevice::GetAccelerationStructurePrebuildInfo(
   auto info = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO{};
   device_->GetRaytracingAccelerationStructurePrebuildInfo(&d3d_inputs, &info);
   return info;
+}
+
+
+GraphicsDevice::GraphicsDevice(ComPtr<IDXGIFactory7> factory, ComPtr<IDXGIAdapter4> const& adapter,
+                               ComPtr<ID3D12Device10> device, CD3DX12FeatureSupport const& supported_features) :
+  factory_{std::move(factory)},
+  device_{std::move(device)},
+  supported_features_{supported_features} {
+  capabilities_ = GraphicsDeviceCapabilities{
+    .highest_shader_model = supported_features_.HighestShaderModel(),
+    .mesh_shader_tier = supported_features_.MeshShaderTier(),
+    .raytracing_tier = supported_features_.RaytracingTier(),
+    .gpu_upload_heap = static_cast<bool>(supported_features_.GPUUploadHeapSupported()),
+    .vp_and_rt_array_index_from_any_shader = static_cast<bool>(
+      supported_features_.VPAndRTArrayIndexFromAnyShaderFeedingRasterizerSupportedWithoutGSEmulation())
+  };
+
+  D3D12MA::ALLOCATOR_DESC const allocator_desc{D3D12MA::ALLOCATOR_FLAG_NONE, device_.Get(), 0, nullptr, adapter.Get()};
+  ThrowIfFailed(CreateAllocator(&allocator_desc, &allocator_), "Failed to create D3D12 memory allocator.");
+
+  D3D12_DESCRIPTOR_HEAP_DESC constexpr rtv_heap_desc{
+    D3D12_DESCRIPTOR_HEAP_TYPE_RTV, rtv_heap_size_, D3D12_DESCRIPTOR_HEAP_FLAG_NONE, 0
+  };
+  ComPtr<ID3D12DescriptorHeap> rtv_heap;
+  ThrowIfFailed(device_->CreateDescriptorHeap(&rtv_heap_desc, IID_PPV_ARGS(&rtv_heap)), "Failed to create RTV heap.");
+  rtv_heap_ = std::make_unique<detail::DescriptorHeap>(std::move(rtv_heap), *device_.Get());
+
+  D3D12_DESCRIPTOR_HEAP_DESC constexpr dsv_heap_desc{
+    D3D12_DESCRIPTOR_HEAP_TYPE_DSV, dsv_heap_size_, D3D12_DESCRIPTOR_HEAP_FLAG_NONE, 0
+  };
+  ComPtr<ID3D12DescriptorHeap> dsv_heap;
+  ThrowIfFailed(device_->CreateDescriptorHeap(&dsv_heap_desc, IID_PPV_ARGS(&dsv_heap)), "Failed to create DSV heap.");
+  dsv_heap_ = std::make_unique<detail::DescriptorHeap>(std::move(dsv_heap), *device_.Get());
+
+  D3D12_DESCRIPTOR_HEAP_DESC constexpr res_desc_heap_desc{
+    D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, res_desc_heap_size_, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE, 0
+  };
+  ComPtr<ID3D12DescriptorHeap> res_desc_heap;
+  ThrowIfFailed(device_->CreateDescriptorHeap(&res_desc_heap_desc, IID_PPV_ARGS(&res_desc_heap)),
+    "Failed to create resource descriptor heap.");
+  res_desc_heap_ = std::make_unique<detail::DescriptorHeap>(std::move(res_desc_heap), *device_.Get());
+
+  D3D12_DESCRIPTOR_HEAP_DESC constexpr sampler_heap_desc{
+    D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER, sampler_heap_size_, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE, 0
+  };
+  ComPtr<ID3D12DescriptorHeap> sampler_heap;
+  ThrowIfFailed(device_->CreateDescriptorHeap(&sampler_heap_desc, IID_PPV_ARGS(&sampler_heap)),
+    "Failed to create sampler heap.");
+  sampler_heap_ = std::make_unique<detail::DescriptorHeap>(std::move(sampler_heap), *device_.Get());
+
+  D3D12_COMMAND_QUEUE_DESC constexpr queue_desc{
+    D3D12_COMMAND_LIST_TYPE_DIRECT, D3D12_COMMAND_QUEUE_PRIORITY_NORMAL, D3D12_COMMAND_QUEUE_FLAG_NONE, 0
+  };
+  ThrowIfFailed(device_->CreateCommandQueue(&queue_desc, IID_PPV_ARGS(&queue_)), "Failed to create command queue.");
+
+  if (BOOL allow_tearing; SUCCEEDED(
+    factory_->CheckFeatureSupport(DXGI_FEATURE_PRESENT_ALLOW_TEARING, &allow_tearing, sizeof(allow_tearing)
+    )) && allow_tearing) {
+    swap_chain_flags_ |= DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
+    present_flags_ |= DXGI_PRESENT_ALLOW_TEARING;
+  }
+
+  idle_fence_ = CreateFence(0);
+  boundary_barrier_fence_ = CreateFence(0);
 }
 
 
